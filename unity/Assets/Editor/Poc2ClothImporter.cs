@@ -79,12 +79,34 @@ namespace Yuni.Poc
             public ParentRef parent;
         }
 
+        /// v1 の BezierParam。根(start)から先端(end)へ深さで補間される。
+        [Serializable]
+        public class Curve
+        {
+            public float startValue;
+            public float endValue;
+            public float useEndValue;
+
+            public float At(float rate01)
+                => useEndValue > 0.5f ? Mathf.Lerp(startValue, endValue, rate01) : startValue;
+        }
+
+        [Serializable]
+        public class ChainParams
+        {
+            public Curve radius;   // 粒子半径。これが布の厚みになる
+            public Curve mass;
+            public Curve gravity;
+            public Vec3 gravity_direction;
+        }
+
         [Serializable]
         public class ChainDef
         {
             public string name;
             public RootRef[] roots;
             public ColliderRef[] colliders;
+            public ChainParams @params;
         }
 
         [Serializable]
@@ -237,7 +259,11 @@ namespace Yuni.Poc
 
                 // 物理パラメータはサンプル(kohaku)の値を出発点にする。
                 // 新規 AddComponent の既定は全て 1.0 で、布として硬すぎる。
-                ctrl._Gravity = new Vector3(0f, -10f, 0f);
+                // 重力は v1 の値を尊重する。Chifuyu のスカートは -4 であり、
+                // 既定の -9.8 や kohaku の -10 より弱い。作者の調整である
+                var gDir = chain.@params?.gravity_direction?.V ?? Vector3.up;
+                var gVal = chain.@params?.gravity?.startValue ?? -10f;
+                ctrl._Gravity = gDir.sqrMagnitude > 0f ? gDir.normalized * gVal : new Vector3(0f, gVal, 0f);
                 ctrl._StructuralShrinkVertical = 1.0f;
                 ctrl._StructuralStretchVertical = 0.1f;
                 ctrl._StructuralShrinkHorizontal = 1.0f;
@@ -252,10 +278,30 @@ namespace Yuni.Poc
 
                 // 拘束を組む。エディタのボタンが呼んでいるものと同じ
                 ctrl.UpdateJointConnection();
+
+                // ここで _Depth と MaxPointDepth が確定するので、v1 のカーブを転記する。
+                // _PointRadius は SPCR の押し出し計算 PushoutFromSphere() が使う「布の厚み」であり、
+                // 0 のままだと衣装が体を貫通する。v1 は radius 0.017 -> 0.035 を持っていた
+                var rad = chain.@params?.radius;
+                var mass = chain.@params?.mass;
+                float maxR = 0f;
+                if ((rad != null || mass != null) && ctrl.PointTbl != null && ctrl.MaxPointDepth > 0)
+                {
+                    foreach (var pt in ctrl.PointTbl)
+                    {
+                        if (pt == null) continue;
+                        var rate = Mathf.Clamp01(pt._Depth / ctrl.MaxPointDepth);
+                        if (rad != null) { pt._PointRadius = rad.At(rate); maxR = Mathf.Max(maxR, pt._PointRadius); }
+                        if (mass != null) pt._Mass = mass.At(rate);
+                        EditorUtility.SetDirty(pt);
+                    }
+                }
+
                 ctrl.UpdateJointDistance();
 
                 var line = $"{chain.name}: ルート {rootPoints.Count} 本 / " +
-                           $"Point {ctrl.PointTbl?.Length ?? 0} 個 / コライダ {ctrl._ColliderTbl.Length} 個";
+                           $"Point {ctrl.PointTbl?.Length ?? 0} 個 / コライダ {ctrl._ColliderTbl.Length} 個 / " +
+                           $"粒子半径 最大 {maxR:F3} / 重力 {ctrl._Gravity.y:F1}";
                 summary.Add(line);
                 Debug.Log("[PoC-2] " + line);
             }
