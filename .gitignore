@@ -1,18 +1,21 @@
 # ---------------------------------------------------------------------------
 # Unity
 # ---------------------------------------------------------------------------
-/[Ll]ibrary/
-/[Tt]emp/
-/[Oo]bj/
-/[Bb]uild/
-/[Bb]uilds/
-/[Ll]ogs/
-/[Uu]ser[Ss]ettings/
-/[Mm]emoryCaptures/
-/[Rr]ecordings/
+# サブディレクトリの Unity プロジェクトにも効くよう、先頭スラッシュを付けない。
+# 付けるとリポジトリ直下しか対象にならず、unity/Library/ が素通りする。
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+.vsconfig
 
 # Asset meta data should only be ignored when the corresponding asset is also ignored
-!/[Aa]ssets/**/*.meta
+!**/[Aa]ssets/**/*.meta
 
 # Visual Studio / Rider / VS Code
 .vs/
@@ -36,12 +39,12 @@
 sysinfo.txt
 *.stackdump
 crashlytics-build.properties
-/[Aa]ssets/[Ss]treamingAssets/aa.meta
-/[Aa]ssets/[Ss]treamingAssets/aa/*
+**/[Aa]ssets/[Ss]treamingAssets/aa.meta
+**/[Aa]ssets/[Ss]treamingAssets/aa/*
 
 # Addressables / AssetBundle 出力
-/[Ss]erver[Dd]ata/
-/[Aa]sset[Bb]undles/
+[Ss]erver[Dd]ata/
+[Aa]sset[Bb]undles/
 
 # ---------------------------------------------------------------------------
 # サードパーティ有償アセット（要件定義書 NF-L-1）
@@ -52,10 +55,10 @@ crashlytics-build.properties
 # なお NF-L-2 により、これらが存在しない状態でもビルドが通らなければ
 # ならない。CI はこの状態を常時検証する。
 # ---------------------------------------------------------------------------
-/[Aa]ssets/MagicaCloth2/
-/[Aa]ssets/MagicaCloth2.meta
-/[Aa]ssets/Plugins/MagicaCloth2/
-/[Aa]ssets/Plugins/MagicaCloth2.meta
+**/[Aa]ssets/MagicaCloth2/
+**/[Aa]ssets/MagicaCloth2.meta
+**/[Aa]ssets/Plugins/MagicaCloth2/
+**/[Aa]ssets/Plugins/MagicaCloth2.meta
 
 # ---------------------------------------------------------------------------
 # モデルファイル（要件定義書 NF-L-5）
@@ -67,8 +70,10 @@ crashlytics-build.properties
 *.pmx
 *.unitypackage
 *.assetbundle
-/[Aa]ssets/[Mm]odels/
-/[Ss]amples/[Mm]odels/
+**/[Aa]ssets/[Mm]odels/
+**/[Ss]amples/[Mm]odels/
+# SPCR のサンプルはユニティちゃんライセンス。MIT ではない
+**/SPCRJointDynamics_Example/
 
 # ---------------------------------------------------------------------------
 # 機密
@@ -76,6 +81,10 @@ crashlytics-build.properties
 *.env
 .env.local
 secrets.json
+
+# 作業中のバックアップ
+*.bak
+*.orig
 
 # ---------------------------------------------------------------------------
 # OS

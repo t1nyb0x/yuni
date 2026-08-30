@@ -88,8 +88,11 @@ cat /c/dev/yuni/unity/ProjectSettings/ProjectVersion.txt
 
 **ここが最初の関門である。** [SPCR JointDynamics](https://github.com/SPARK-inc/SPCRJointDynamics) は最終コミットが 2023-10 で約 3 年止まっており、Unity 6 での動作は誰も保証していない（リスク R-13）。
 
-1. リポジトリを取得し、`unity/Packages/SPCRJointDynamics` をプロジェクトへ入れる
-2. **Unity のコンソールを見る**
+**`Packages` はエクスプローラ側で置くこと。** Unity の Project ウィンドウに映る `Packages` は読み取り専用の表示であり、そこへドラッグしても入らない。Import Package もドラッグも**すべて `Assets` 行き**になる。
+
+1. リポジトリを取得し、**`unity/Packages/SPCRJointDynamics` フォルダだけ**をプロジェクトの `Packages` 直下へコピーする（同階層の `manifest.json` / `packages-lock.json` は持ってこないこと。自分のプロジェクトのものを壊す）
+2. **`com.unity.burst` をプロジェクトへ追加する。** SPCR は Burst を使うのに `package.json` で依存を宣言していない。入れないと `CS0234: 'Unity.Burst' が見つからない` が大量に出る（[ADR-0003](../adr/0003-spcr-as-default-cloth-backend.md)「実測で判明した落とし穴」）
+3. **Unity のコンソールを見る**
 
 | 結果 | 次の行動 |
 |---|---|
@@ -98,6 +101,16 @@ cat /c/dev/yuni/unity/ProjectSettings/ProjectVersion.txt
 | エラーが大量、または深い | **止まる。** MagicaCloth2 への切り替えを検討する（[ADR-0003](../adr/0003-spcr-as-default-cloth-backend.md)） |
 
 **直した量を必ず記録すること。** 「動いた」だけでは、フォークして自前で保守すべきか（U-14）を後から判断できない。
+
+> **実施済み（2026-08-30）— 突破。**
+>
+> Unity `6000.0.82f1` にて **SPCR v2.0.11 は無修正でコンパイル成功。エラー 0 / 警告 4。**
+>
+> 警告は 4 件とも `FindObjectOfType` 系の非推奨 API（CS0618）で、動作に影響しない。**API 不整合による破綻は 1 件も無かった。** 3 年更新が止まっているコードだが、Unity 6 で壊れてはいなかった。
+>
+> 唯一の躓きは `com.unity.burst` の未導入（上記手順 2）。SPCR 側の依存宣言漏れであり、Unity 6 とは無関係だった。
+>
+> **非推奨警告は直さないこと。** SPCR に手を入れると upstream との差分が生まれ、フォーク相当の保守負担が発生する。Unity は 6000.0 に固定してあり（[ADR-0002](../adr/0002-unity-6000-0-lts.md)）、これらの API はまだ動く。**直すのは U-14 でフォークを決めたときでよい。**
 
 #### Step 4 — UniVRM
 
