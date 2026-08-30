@@ -120,10 +120,13 @@ namespace Yuni.Poc
         // ---- メニュー ----
 
         [MenuItem("Yuni/PoC-2/スカートだけ SPCR へ変換", false, 1)]
-        static void ImportSkirtOnly() => Run("Skirt");
+        static void ImportSkirtOnly() => Run("Skirt", addBodyColliders: false);
 
-        [MenuItem("Yuni/PoC-2/全チェーンを SPCR へ変換", false, 2)]
-        static void ImportAll() => Run(null);
+        [MenuItem("Yuni/PoC-2/スカートだけ SPCR へ変換（人体コライダを補う）", false, 2)]
+        static void ImportSkirtWithBody() => Run("Skirt", addBodyColliders: true);
+
+        [MenuItem("Yuni/PoC-2/全チェーンを SPCR へ変換", false, 3)]
+        static void ImportAll() => Run(null, addBodyColliders: false);
 
         [MenuItem("Yuni/PoC-2/生成した SPCR 構成を削除", false, 20)]
         static void Cleanup()
@@ -144,7 +147,7 @@ namespace Yuni.Poc
 
         // ---- 本体 ----
 
-        static void Run(string chainFilter)
+        static void Run(string chainFilter, bool addBodyColliders)
         {
             if (EditorApplication.isPlaying)
             {
@@ -225,6 +228,64 @@ namespace Yuni.Poc
                 Debug.Log($"[PoC-2] コライダ生成: {def.name} -> 親 {bone.name} ({def.shape})");
             }
 
+            // --- 人体コライダを補う（要件 F-17-3）---
+            // v1 がスカートへ割り当てていたのは太もも 2 本だけで、腰も尻も無い。
+            // 立ち姿勢なら足りるが、座ると尻がスカートを押し下げるのに押し返す実体が無く、
+            // 布が体の内側へ落ち込んで体が突き抜ける。
+            // 抽出データに mergeAvatarCollider: 1 があったことから、v1 は別の場所から
+            // コライダを合流させていた可能性が高く、プレハブの 2 個が全部ではなかったとみられる。
+            var bodyColliders = new List<SPCRJointDynamicsCollider>();
+            if (addBodyColliders)
+            {
+                var animator = root.GetComponentInChildren<Animator>();
+                if (animator == null || !animator.isHuman)
+                {
+                    Debug.LogWarning("[PoC-2] Humanoid の Animator が無いため人体コライダを作れません。");
+                }
+                else
+                {
+                    var hips = animator.GetBoneTransform(HumanBodyBones.Hips);
+                    var legL = animator.GetBoneTransform(HumanBodyBones.LeftUpperLeg);
+                    var legR = animator.GetBoneTransform(HumanBodyBones.RightUpperLeg);
+                    var spine = animator.GetBoneTransform(HumanBodyBones.Spine);
+
+                    if (hips != null && legL != null && legR != null)
+                    {
+                        // 腰幅を基準にする。絶対値ではなく体格から決める（要件 F-17-3）
+                        float hipWidth = Vector3.Distance(legL.position, legR.position);
+
+                        // 尻。左右の脚付け根を結ぶ向きのカプセルで覆う
+                        var go = new GameObject("SPCR Collider (Auto Hips)");
+                        Undo.RegisterCreatedObjectUndo(go, "PoC-2 body collider");
+                        go.transform.SetParent(hips, false);
+                        go.transform.position = (legL.position + legR.position) * 0.5f;
+                        go.transform.rotation = Quaternion.LookRotation(
+                            Vector3.Cross(legR.position - legL.position, Vector3.up),
+                            legR.position - legL.position);   // up を左右方向へ向ける
+                        var c = go.AddComponent<SPCRJointDynamicsCollider>();
+                        c.RadiusRaw = hipWidth * 0.55f;
+                        c.RadiusTailScaleRaw = 1f;
+                        c.HeightRaw = hipWidth * 0.8f;
+                        bodyColliders.Add(c);
+                        summary.Add($"人体コライダ: Auto Hips (腰幅 {hipWidth:F3})");
+
+                        if (spine != null)
+                        {
+                            var go2 = new GameObject("SPCR Collider (Auto Waist)");
+                            Undo.RegisterCreatedObjectUndo(go2, "PoC-2 body collider");
+                            go2.transform.SetParent(spine, false);
+                            go2.transform.localPosition = Vector3.zero;
+                            var c2 = go2.AddComponent<SPCRJointDynamicsCollider>();
+                            c2.RadiusRaw = hipWidth * 0.45f;
+                            c2.RadiusTailScaleRaw = 1f;
+                            c2.HeightRaw = 0f;
+                            bodyColliders.Add(c2);
+                            summary.Add("人体コライダ: Auto Waist");
+                        }
+                    }
+                }
+            }
+
             // --- チェーンを作る ---
             foreach (var chain in data.chains)
             {
@@ -277,10 +338,13 @@ namespace Yuni.Poc
                 ctrl._BendingShrinkVertical = 0.1f;
                 ctrl._BendingShrinkHorizontal = 0.1f;
                 ctrl._RootPointTbl = rootPoints.ToArray();
-                ctrl._ColliderTbl = chain.colliders
+                var cols = chain.colliders
                     .Select(c => c.name != null && madeColliders.TryGetValue(c.name, out var m) ? m : null)
                     .Where(m => m != null)
-                    .ToArray();
+                    .ToList();
+                // 人体コライダは輪のチェーン（スカート）にだけ足す。髪には要らない
+                if (addBodyColliders && IsClosedRing(rootPoints)) cols.AddRange(bodyColliders);
+                ctrl._ColliderTbl = cols.ToArray();
 
                 // チェーンが胴を一周しているか（スカート）を形状から判定する。
                 // 名前では決めない。閉じているなら水平方向の拘束を輪にする必要がある
