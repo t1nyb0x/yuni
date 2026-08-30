@@ -29,7 +29,8 @@
 | [0001](0001-unity-for-cloth-and-emote.md) | クロスとエモートのために Unity で作り直す | 採用（**一部を 0004 で改訂**） |
 | [0002](0002-unity-6000-0-lts.md) | Unity 6000.0 LTS に固定する | 採用 |
 | [0003](0003-spcr-as-default-cloth-backend.md) | クロスは SPCR JointDynamics を既定とし、MagicaCloth2 は対応予定に置く | 採用 |
-| [0004](0004-unitypackage-first-coexist-with-moca.md) | Yuni の主目的を unitypackage 配布モデルに置き、moca と恒久共存する | 採用 |
+| [0004](0004-unitypackage-first-coexist-with-moca.md) | Yuni の主目的を unitypackage 配布モデルに置き、moca と恒久共存する | 採用（**A-3 を 0005 で改訂**） |
+| [0005](0005-yuni-always-builds-cloth.md) | クロスは常に Yuni が構成する。作者の設定は手がかりとして使う | 採用 |
 
 ## moca からの継承
 
