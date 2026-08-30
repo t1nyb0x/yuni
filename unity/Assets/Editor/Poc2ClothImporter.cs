@@ -121,12 +121,24 @@ namespace Yuni.Poc
             public ChainParams @params;
         }
 
+        /// SPCR に相当物が無い v1 コンポーネント（MeshCloth など）。
+        /// 変換はできないが、当てる相手と物理値は BoneCloth での代替に使える。
+        [Serializable]
+        public class UnconvertibleDef
+        {
+            public string name;
+            public string kind;            // "mesh_cloth" | "virtual_deformer" | "spring"
+            public ColliderRef[] colliders;
+            public ChainParams @params;
+        }
+
         [Serializable]
         public class Extract
         {
             public string source;
             public ChainDef[] chains;
             public ColliderDef[] colliders;
+            public UnconvertibleDef[] unconvertible;
         }
 
         // ---- メニュー ----
@@ -137,7 +149,10 @@ namespace Yuni.Poc
         [MenuItem("Yuni/PoC-2/スカートだけ SPCR へ変換（人体コライダを補う）", false, 2)]
         static void ImportSkirtWithBody() => Run("Skirt", addBodyColliders: true);
 
-        [MenuItem("Yuni/PoC-2/全チェーンを SPCR へ変換", false, 3)]
+        [MenuItem("Yuni/PoC-2/MeshCloth を BoneCloth で代替して変換", false, 3)]
+        static void ImportWithSubstitute() => Run("Skirt", addBodyColliders: false, substituteMeshCloth: true);
+
+        [MenuItem("Yuni/PoC-2/全チェーンを SPCR へ変換", false, 20)]
         static void ImportAll() => Run(null, addBodyColliders: false);
 
         [MenuItem("Yuni/PoC-2/生成した SPCR 構成を削除", false, 20)]
@@ -159,7 +174,7 @@ namespace Yuni.Poc
 
         // ---- 本体 ----
 
-        static void Run(string chainFilter, bool addBodyColliders)
+        static void Run(string chainFilter, bool addBodyColliders, bool substituteMeshCloth = false)
         {
             if (EditorApplication.isPlaying)
             {
@@ -417,6 +432,87 @@ namespace Yuni.Poc
                 Debug.Log("[PoC-2] " + line);
             }
 
+            // --- MeshCloth を BoneCloth で代替する（案 A）---
+            // SPCR は skeleton base であり MeshCloth（頂点駆動）に相当する機能を持たない。
+            // ただし衣装のボーンは存在するため、そこから BoneCloth を組める。
+            // 当てる相手は MeshCloth が持っていた colliderList をそのまま使う。
+            // 作者が意図した指定であり、ゼロから推測するより確実である。
+            if (substituteMeshCloth && data.unconvertible != null)
+            {
+                var animator = root.GetComponentInChildren<Animator>();
+                if (animator == null || !animator.isHuman)
+                {
+                    summary.Add("代替不可: Humanoid の Animator が無い");
+                }
+                else
+                {
+                    foreach (var mc in data.unconvertible)
+                    {
+                        if (mc.kind != "mesh_cloth") continue;
+
+                        var rings = FindGarmentRings(animator);
+                        if (rings.Count == 0)
+                        {
+                            summary.Add($"代替不可: {mc.name} に対応する衣装ボーンの輪が見つからない");
+                            continue;
+                        }
+
+                        var mcCols = (mc.colliders ?? new ColliderRef[0])
+                            .Select(c => c.name != null && madeColliders.TryGetValue(c.name, out var m) ? m : null)
+                            .Where(m => m != null).ToArray();
+
+                        foreach (var ring in rings)
+                        {
+                            var pts = new List<SPCRJointDynamicsPoint>();
+                            foreach (var b in ring.Value)
+                            {
+                                var pt = AddPointsRecursive(b, isRoot: true);
+                                if (pt != null) pts.Add(pt);
+                            }
+                            if (pts.Count == 0) continue;
+
+                            var c2 = Undo.AddComponent<SPCRJointDynamicsController>(root);
+                            c2.name = "Substituted " + ring.Key;
+                            c2._RootTransform = root.transform;
+                            c2._RootPointTbl = pts.ToArray();
+                            c2._ColliderTbl = mcCols;
+                            c2._IsLoopRootPoints = true;
+                            c2._Relaxation = Relaxation;
+                            c2._SubSteps = SubSteps;
+
+                            var g2 = mc.@params?.gravity?.startValue ?? -4f;
+                            c2._Gravity = new Vector3(0f, g2, 0f);
+                            c2._StructuralShrinkVertical = 1.0f;
+                            c2._StructuralStretchVertical = 0.1f;
+                            c2._StructuralShrinkHorizontal = 1.0f;
+                            c2._StructuralStretchHorizontal = 1.0f;
+                            c2._BendingShrinkVertical = 0.1f;
+                            c2._BendingShrinkHorizontal = 0.1f;
+
+                            c2.SortConstraintsHorizontalRoot(
+                                SPCRJointDynamicsController.UpdateJointConnectionType.SortNearPointXZ);
+
+                            var r2 = mc.@params?.radius;
+                            float maxR2 = 0f;
+                            if (r2 != null && c2.PointTbl != null && c2.MaxPointDepth > 0)
+                            {
+                                foreach (var pt in c2.PointTbl)
+                                {
+                                    if (pt == null) continue;
+                                    pt._PointRadius = r2.At(Mathf.Clamp01(pt._Depth / c2.MaxPointDepth));
+                                    maxR2 = Mathf.Max(maxR2, pt._PointRadius);
+                                    EditorUtility.SetDirty(pt);
+                                }
+                            }
+                            c2.UpdateJointDistance();
+
+                            summary.Add($"代替: {ring.Key} (根 {pts.Count} 本 / Point {c2.PointTbl?.Length ?? 0} / " +
+                                        $"コライダ {mcCols.Length} / 粒子半径 {maxR2:F3}) <- {mc.name}");
+                        }
+                    }
+                }
+            }
+
             EditorUtility.SetDirty(root);
             UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(root.scene);
 
@@ -430,17 +526,21 @@ namespace Yuni.Poc
         /// XZ 平面上で重心まわりの角度を並べ、最大の隙間が小さければ閉じているとみなす。
         /// 名前で判定しないのは、モデルごとに命名が違うためである。
         static bool IsClosedRing(List<SPCRJointDynamicsPoint> pts)
+            => IsClosedRing(pts.Select(p => p.transform.position).ToList());
+
+        static bool IsClosedRing(List<Vector3> positions)
         {
+            var pts = positions;
             if (pts.Count < 4) return false;
 
             var center = Vector3.zero;
-            foreach (var p in pts) center += p.transform.position;
+            foreach (var p in pts) center += p;
             center /= pts.Count;
 
             var angles = new List<float>();
             foreach (var p in pts)
             {
-                var d = p.transform.position - center;
+                var d = p - center;
                 angles.Add(Mathf.Atan2(d.z, d.x) * Mathf.Rad2Deg);
             }
             angles.Sort();
@@ -450,6 +550,66 @@ namespace Yuni.Poc
                 maxGap = Mathf.Max(maxGap, angles[i] - angles[i - 1]);
 
             return maxGap < 90f;
+        }
+
+        /// 衣装ボーンの輪を探す。MeshCloth を BoneCloth で代替するために使う。
+        ///
+        /// 見つけ方:
+        ///   1. Hips の直下で、Humanoid のボーンではなく、子を持つものを候補にする
+        ///      （Humanoid の骨格は Animator が教えてくれるので、それ以外＝衣装や制御用）
+        ///   2. 名前の接頭辞でグループ化する（Skirt1_1_L / Skirt2_1_R -> "Skirt"）
+        ///   3. 4 本以上あり、かつ胴を一周しているグループだけを衣装の輪とみなす
+        ///
+        /// 名前を手がかりにするのは要件 F-17-4（ボーン名からの推測）が認める範囲である。
+        /// F-18-7 の「名前で引き当てない」は fileID 参照の解決についての規定であり、
+        /// こちらのような発見的な探索とは別の話。
+        /// ToeTipIK_L/R や WaistControl_L/R は 2 本しかないため輪の条件で落ちる。
+        static List<KeyValuePair<string, List<Transform>>> FindGarmentRings(Animator animator)
+        {
+            var result = new List<KeyValuePair<string, List<Transform>>>();
+
+            var humanoid = new HashSet<Transform>();
+            foreach (HumanBodyBones hb in Enum.GetValues(typeof(HumanBodyBones)))
+            {
+                if (hb == HumanBodyBones.LastBone) continue;
+                var t = animator.GetBoneTransform(hb);
+                if (t != null) humanoid.Add(t);
+            }
+
+            var hips = animator.GetBoneTransform(HumanBodyBones.Hips);
+            if (hips == null) return result;
+
+            var groups = new Dictionary<string, List<Transform>>();
+            for (int i = 0; i < hips.childCount; ++i)
+            {
+                var c = hips.GetChild(i);
+                if (humanoid.Contains(c)) continue;
+                if (c.childCount == 0) continue;                              // 末端だけの骨は衣装ではない
+                if (c.name.StartsWith("SPCR ") || c.name.StartsWith("Magica ")) continue;
+
+                var key = PrefixOf(c.name);
+                if (!groups.TryGetValue(key, out var list)) groups[key] = list = new List<Transform>();
+                list.Add(c);
+            }
+
+            foreach (var kv in groups)
+            {
+                if (kv.Value.Count < 4) continue;
+                var pos = kv.Value.Select(t => t.position).ToList();
+                if (!IsClosedRing(pos)) continue;
+                result.Add(kv);
+            }
+            return result;
+        }
+
+        /// "Skirt1_1_L" -> "Skirt"、"WaistControl_L" -> "WaistControl"
+        static string PrefixOf(string name)
+        {
+            int i = 0;
+            while (i < name.Length && !char.IsDigit(name[i])) ++i;
+            var head = name.Substring(0, i);
+            if (head.EndsWith("_L") || head.EndsWith("_R")) head = head.Substring(0, head.Length - 2);
+            return head.TrimEnd('_');
         }
 
         /// 重心まわりの角度で根を並べる。閉じた輪ならこれが正しい隣接順である。

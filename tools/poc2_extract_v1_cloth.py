@@ -276,9 +276,22 @@ def main() -> int:
         elif "Mesh Cloth" in name or "Virtual Deformer" in name or "Spring" in name:
             # BoneCloth 以外の v1 コンポーネント。SPCR に相当物が無い可能性が高いので
             # 「見つけた」ことだけは必ず記録する。黙って落とすと変換漏れに気づけない
-            others.append({"name": name, "mono_file_id": fid,
-                           "kind": "mesh_cloth" if "Mesh Cloth" in name
-                                   else ("virtual_deformer" if "Virtual Deformer" in name else "spring")})
+            # 当てる相手だけは必ず拾う。作者が意図したコライダの指定であり、
+            # BoneCloth で代替するときにそのまま使える（ゼロから推測しなくて済む）
+            others.append({
+                "name": name,
+                "mono_file_id": fid,
+                "kind": "mesh_cloth" if "Mesh Cloth" in name
+                        else ("virtual_deformer" if "Virtual Deformer" in name else "spring"),
+                "colliders": [
+                    {"mono_file_id": c, "name": owner_name(c)} for c in section_refs(t, "colliderList")
+                ],
+                "params": {
+                    "radius": curve(t, "radius"),
+                    "gravity": curve(t, "gravity"),
+                    "gravity_direction": vec3(t, "gravityDirection"),
+                },
+            })
 
         elif "Bone Cloth" in name or "BoneCloth" in name:
             root_fids = section_refs(t, "rootList")
