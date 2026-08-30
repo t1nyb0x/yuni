@@ -45,14 +45,18 @@
 | 項目 | 値 |
 |---|---|
 | Unity | **6000.0 LTS**（[ADR-0002](../adr/0002-unity-6000-0-lts.md)）。パッチは `ProjectSettings/ProjectVersion.txt` を正とする |
-| レンダーパイプライン | URP（UniWinC_VRM に合わせる） |
+| レンダーパイプライン | **Built-in RP**（下記） |
 | UniVRM | v0.130.1 以降 |
 | MagicaCloth2 | 各自のライセンスでインポート。**`.gitignore` 済み。コミットしないこと** |
 | 検証用 VRM | 各自で用意。**コミットしないこと**（`.gitignore` 済み、要件 NF-L-5） |
 
+> **なぜ URP ではなく Built-in RP なのか。** [VRM 0.x には URP 対応の MToon が無い](https://vrm.dev/api/material/urp/)。URP を選ぶと VRM 0.x のマテリアルが壊れ、**検証用モデルを VRM 1.0 に限定することになる。** PoC-1 で確かめたいのはクロスの挙動であって描画ではないため、変数を 1 つ減らす。
+>
+> **製品側の RP をどちらにするかは別の判断であり、まだ決めていない**（要件定義書 U-13）。F-01-3 が VRM 0.x / 1.0 の両対応を要求している一方、UniWinC_VRM は URP を採っている。**PoC-1 の後に ADR で決めること。** ここでの Built-in RP はその判断を先取りしない。
+
 ### 手順
 
-1. Unity Hub で 6000.0 LTS の 3D (URP) プロジェクトを `unity/` 配下に作成する
+1. Unity Hub で 6000.0 LTS の 3D (Built-in Render Pipeline) プロジェクトを `unity/` 配下に作成する
 2. UniVRM を導入する（UnityPackage または UPM）
 3. MagicaCloth2 をインポートする
 4. `ProjectSettings/ProjectVersion.txt` の値を [ADR-0002](../adr/0002-unity-6000-0-lts.md) へ追記する
