@@ -28,6 +28,18 @@ namespace Yuni.Poc
 {
     public static class Poc2ClothImporter
     {
+        // ---- 調整用。PoC なのでここを直接書き換えて比べる ----
+
+        /// 輪（スカート）の根をどう並べるか。
+        /// false = SPCR の近傍探索に任せる（貪欲。輪の途中で反対側へ飛ぶことがある）
+        /// true  = 重心まわりの角度で並べる（幾何的には正しいが、上部が振動する場合がある）
+        const bool UseAngularSortForRings = false;
+
+        /// ソルバの反復回数。既定はどちらも 1。
+        /// 上げると収束はするが、Chifuyu では 3x2 にしたところ布が体を突き抜けて悪化した。
+        const int Relaxation = 1;
+        const int SubSteps = 1;
+
         // ---- JSON の受け皿（抽出器 tools/poc2_extract_v1_cloth.py の出力に対応）----
 
         [Serializable] public class Vec3 { public float x, y, z; public Vector3 V => new Vector3(x, y, z); }
@@ -329,8 +341,8 @@ namespace Yuni.Poc
                 // 反復回数。既定はどちらも 1 で、コリジョンの押し出しと拘束が
                 // 毎フレーム押し合いになり布が振動する。
                 // Relaxation = 拘束の反復、SubSteps = 時間刻みの分割
-                ctrl._Relaxation = 3;
-                ctrl._SubSteps = 2;
+                ctrl._Relaxation = Relaxation;
+                ctrl._SubSteps = SubSteps;
                 ctrl._StructuralShrinkVertical = 1.0f;
                 ctrl._StructuralStretchVertical = 0.1f;
                 ctrl._StructuralShrinkHorizontal = 1.0f;
@@ -350,11 +362,12 @@ namespace Yuni.Poc
                 // 名前では決めない。閉じているなら水平方向の拘束を輪にする必要がある
                 var isRing = IsClosedRing(rootPoints);
                 ctrl._IsLoopRootPoints = isRing;
+                var useAngular = isRing && UseAngularSortForRings;
 
                 // 水平拘束は _RootPointTbl の並び順で張られる。順序を誤ると胴を横断する
                 // バネができ、スカートが裂けたり片側が引き込まれたりする
                 string sortNote;
-                if (isRing)
+                if (useAngular)
                 {
                     // 輪だと分かっているなら重心まわりの角度で並べるのが確実。
                     // SPCR の SortNearPointXZ は「最も近い点を貪欲に繋ぐ」方式で、
