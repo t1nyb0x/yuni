@@ -278,15 +278,28 @@ namespace Yuni.Poc
 
                 // チェーンが胴を一周しているか（スカート）を形状から判定する。
                 // 名前では決めない。閉じているなら水平方向の拘束を輪にする必要がある
-                ctrl._IsLoopRootPoints = IsClosedRing(rootPoints);
+                var isRing = IsClosedRing(rootPoints);
+                ctrl._IsLoopRootPoints = isRing;
 
-                // 拘束を組む。**並べ替え付きの版を呼ぶこと。**
-                // 素の UpdateJointConnection() は _RootPointTbl の順序をそのまま使うため、
-                // v1 の rootList の並び（空間的に隣り合っていない）で水平拘束が張られ、
-                // スカートが引き裂かれる。SortConstraintsHorizontalRoot は根を空間的に
-                // 並べ替えたうえで内部で UpdateJointConnection() を呼ぶ
-                ctrl.SortConstraintsHorizontalRoot(
-                    SPCRJointDynamicsController.UpdateJointConnectionType.SortNearPointXZ);
+                // 水平拘束は _RootPointTbl の並び順で張られる。順序を誤ると胴を横断する
+                // バネができ、スカートが裂けたり片側が引き込まれたりする
+                string sortNote;
+                if (isRing)
+                {
+                    // 輪だと分かっているなら重心まわりの角度で並べるのが確実。
+                    // SPCR の SortNearPointXZ は「最も近い点を貪欲に繋ぐ」方式で、
+                    // 輪の途中で反対側へ飛ぶことがある。1 本飛ぶだけで片側が崩れる
+                    ctrl._RootPointTbl = SortByAngle(rootPoints).ToArray();
+                    ctrl.UpdateJointConnection();
+                    sortNote = $"角度順 (隣接距離 最小/最大 = {RingUniformity(ctrl._RootPointTbl):F2})";
+                }
+                else
+                {
+                    // 輪でないもの（髪の房など）は SPCR の近傍探索に任せる
+                    ctrl.SortConstraintsHorizontalRoot(
+                        SPCRJointDynamicsController.UpdateJointConnectionType.SortNearPointXZ);
+                    sortNote = "近傍探索XZ";
+                }
 
                 // ここで _Depth と MaxPointDepth が確定するので、v1 のカーブを転記する。
                 // _PointRadius は SPCR の押し出し計算 PushoutFromSphere() が使う「布の厚み」であり、
@@ -311,7 +324,7 @@ namespace Yuni.Poc
                 var line = $"{chain.name}: ルート {rootPoints.Count} 本 / " +
                            $"Point {ctrl.PointTbl?.Length ?? 0} 個 / コライダ {ctrl._ColliderTbl.Length} 個 / " +
                            $"粒子半径 最大 {maxR:F3} / 重力 {ctrl._Gravity.y:F1} / " +
-                           $"輪 {(ctrl._IsLoopRootPoints ? "はい" : "いいえ")}";
+                           $"輪 {(ctrl._IsLoopRootPoints ? "はい" : "いいえ")} / 並べ替え {sortNote}";
                 summary.Add(line);
                 Debug.Log("[PoC-2] " + line);
             }
@@ -349,6 +362,40 @@ namespace Yuni.Poc
                 maxGap = Mathf.Max(maxGap, angles[i] - angles[i - 1]);
 
             return maxGap < 90f;
+        }
+
+        /// 重心まわりの角度で根を並べる。閉じた輪ならこれが正しい隣接順である。
+        static List<SPCRJointDynamicsPoint> SortByAngle(List<SPCRJointDynamicsPoint> pts)
+        {
+            var center = Vector3.zero;
+            foreach (var p in pts) center += p.transform.position;
+            center /= pts.Count;
+
+            var sorted = new List<SPCRJointDynamicsPoint>(pts);
+            sorted.Sort((a, b) =>
+            {
+                var da = a.transform.position - center;
+                var db = b.transform.position - center;
+                return Mathf.Atan2(da.z, da.x).CompareTo(Mathf.Atan2(db.z, db.x));
+            });
+            return sorted;
+        }
+
+        /// 並べたあとの隣接距離の均一さ。1.0 に近いほど素直な輪。
+        /// 極端に小さいと、どこかで胴を横断している疑いがある。
+        static float RingUniformity(SPCRJointDynamicsPoint[] pts)
+        {
+            if (pts == null || pts.Length < 3) return 1f;
+            float min = float.MaxValue, max = 0f;
+            for (int i = 0; i < pts.Length; ++i)
+            {
+                var a = pts[i].transform.position;
+                var b = pts[(i + 1) % pts.Length].transform.position;
+                var d = Vector3.Distance(a, b);
+                min = Mathf.Min(min, d);
+                max = Mathf.Max(max, d);
+            }
+            return max > 0f ? min / max : 1f;
         }
 
         /// v1 の axis(0=X,1=Y,2=Z) を SPCR の規約(常に Y)へ合わせる補正回転。
