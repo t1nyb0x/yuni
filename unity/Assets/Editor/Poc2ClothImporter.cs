@@ -124,6 +124,15 @@ namespace Yuni.Poc
 
         static void Run(string chainFilter)
         {
+            if (EditorApplication.isPlaying)
+            {
+                EditorUtility.DisplayDialog("PoC-2",
+                    "Play 中は実行できません。\n\n" +
+                    "Play を抜けてから変換し、そのあとで Play してください。\n" +
+                    "Play 中に加えた変更は Play を抜けると消えます。", "OK");
+                return;
+            }
+
             var root = Selection.activeGameObject;
             if (root == null)
             {
@@ -150,7 +159,9 @@ namespace Yuni.Poc
                 return;
             }
 
+            var summary = new List<string>();
             var boneByFileId = BuildBoneMap(root.transform);
+            summary.Add($"FBX Transform の解決: {boneByFileId.Count} 件");
             Debug.Log($"[PoC-2] FBX の Transform を {boneByFileId.Count} 件解決しました。");
 
             // --- コライダを作る ---
@@ -188,6 +199,7 @@ namespace Yuni.Poc
                     col.HeightRaw = 0f;   // 0 なら球として扱われる
                 }
                 madeColliders[def.name] = col;
+                summary.Add($"コライダ: {def.name} -> 親 {bone.name} ({def.shape})");
                 Debug.Log($"[PoC-2] コライダ生成: {def.name} -> 親 {bone.name} ({def.shape})");
             }
 
@@ -231,12 +243,19 @@ namespace Yuni.Poc
                 ctrl.UpdateJointConnection();
                 ctrl.UpdateJointDistance();
 
-                Debug.Log($"[PoC-2] {chain.name}: ルート {rootPoints.Count} 本 / " +
-                          $"Point {ctrl.PointTbl?.Length ?? 0} 個 / コライダ {ctrl._ColliderTbl.Length} 個");
+                var line = $"{chain.name}: ルート {rootPoints.Count} 本 / " +
+                           $"Point {ctrl.PointTbl?.Length ?? 0} 個 / コライダ {ctrl._ColliderTbl.Length} 個";
+                summary.Add(line);
+                Debug.Log("[PoC-2] " + line);
             }
 
             EditorUtility.SetDirty(root);
-            Debug.Log("[PoC-2] 完了。Play して座らせ、貫通するかを見ること。");
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(root.scene);
+
+            var report = string.Join("\n", summary);
+            Debug.Log("[PoC-2] 完了\n" + report);
+            EditorUtility.DisplayDialog("PoC-2 変換結果",
+                report + "\n\nルートが 0 本なら fileID の突き合わせが失敗しています。", "OK");
         }
 
         /// v1 の axis(0=X,1=Y,2=Z) を SPCR の規約(常に Y)へ合わせる補正回転。
