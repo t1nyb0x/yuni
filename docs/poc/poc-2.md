@@ -162,6 +162,44 @@ Missing Script のコンポーネントは、Unity の Inspector では `None (M
 
 **移せなかった項目を一覧で記録すること。** それが F-18-5（Packager のプレビュー）の要件になる。
 
+#### SPCR の API 調査で判明したこと（2026-08-31）
+
+**1. チェーン上の「全ボーン」に `SPCRJointDynamicsPoint` が要る。**
+
+`SPCRJointDynamicsController.UpdateJointConnection()` は `SearchPoints()` で根から辿るが、**Point の無い GameObject に当たった時点で打ち切る。** 根だけに付けても繋がらない。根は `_IsFixed = true`（腰に固定）、以降は false。
+
+**2. カプセルの向きの規約が v1 と違う。落とすと形が狂う。**
+
+| | 軸の決め方 |
+|---|---|
+| MagicaCloth v1 | `axis` フィールド（0=X / 1=Y / 2=Z） |
+| **SPCR** | **常に `transform.up`（Y）固定** |
+
+Chifuyu の太ももコライダは `axis: 0`（X）かつ Transform に Z 軸まわり約 -90° の回転が入っている。**そのまま付けると 90° ずれる。** 補正回転を挟むこと。
+
+```
+R * (0,1,0) が v1 の軸方向に一致するようにする
+  axis=0 (X) -> Quaternion.Euler(0, 0, -90)
+  axis=1 (Y) -> identity
+  axis=2 (Z) -> Quaternion.Euler(90, 0, 0)
+```
+
+**既存の v1 オブジェクトの回転を書き換えないこと。** 補正した新しい GameObject を作り、v1 側は触らない。元データを壊すと再実行できなくなる。
+
+**3. 寸法の対応**
+
+| v1 | SPCR |
+|---|---|
+| `startRadius` | `RadiusRaw` |
+| `endRadius` | `RadiusTailScaleRaw` = endRadius / startRadius |
+| `length` | `HeightRaw` |
+| 球（`radius`） | `RadiusRaw` = radius、`HeightRaw` = 0（0 なら球扱い） |
+| `center` | SPCR に相当物なし。**Transform の位置へ畳み込む** |
+
+**4. 構築の呼び出し口**
+
+`UpdateJointConnection()` → `UpdateJointDistance()` の順。エディタのインスペクタのボタンが呼んでいるものと同じであり、**実行時構築ではない**（PoC-1 との違い）。
+
 ### Step 5 — AssetBundle として焼く
 
 `BuildPipeline.BuildAssetBundles` で prefab を焼く。**独自コンテナで包まないこと**（D-4）。
