@@ -111,7 +111,7 @@ namespace Yuni.Poc
 
             int removed = 0;
             foreach (var c in root.GetComponentsInChildren<SPCRJointDynamicsController>(true))
-            { UnityEngine.Object.DestroyImmediate(c.gameObject); removed++; }
+            { UnityEngine.Object.DestroyImmediate(c); removed++; }   // ルートに同居するのでコンポーネントだけ消す
             foreach (var p in root.GetComponentsInChildren<SPCRJointDynamicsPoint>(true))
             { UnityEngine.Object.DestroyImmediate(p); removed++; }
             foreach (var col in root.GetComponentsInChildren<SPCRJointDynamicsCollider>(true))
@@ -227,12 +227,23 @@ namespace Yuni.Poc
                     continue;
                 }
 
-                var ctrlGo = new GameObject($"SPCR {chain.name}");
-                Undo.RegisterCreatedObjectUndo(ctrlGo, "PoC-2 controller");
-                ctrlGo.transform.SetParent(root.transform, false);
-
-                var ctrl = ctrlGo.AddComponent<SPCRJointDynamicsController>();
+                // Controller はモデルのルートへ付ける。作者のサンプルでは 7 本すべてが
+                // モデルルート(01_kohaku_B)に付いており、これが想定の配置である。
+                // コライダ側の OnDrawGizmos が GetComponentsInParent で Controller を
+                // 探すため、ここを外すとギズモが「未登録(赤)」になり調査しづらくなる。
+                var ctrl = Undo.AddComponent<SPCRJointDynamicsController>(root);
+                ctrl.name = chain.name;
                 ctrl._RootTransform = root.transform;
+
+                // 物理パラメータはサンプル(kohaku)の値を出発点にする。
+                // 新規 AddComponent の既定は全て 1.0 で、布として硬すぎる。
+                ctrl._Gravity = new Vector3(0f, -10f, 0f);
+                ctrl._StructuralShrinkVertical = 1.0f;
+                ctrl._StructuralStretchVertical = 0.1f;
+                ctrl._StructuralShrinkHorizontal = 1.0f;
+                ctrl._StructuralStretchHorizontal = 1.0f;
+                ctrl._BendingShrinkVertical = 0.1f;
+                ctrl._BendingShrinkHorizontal = 0.1f;
                 ctrl._RootPointTbl = rootPoints.ToArray();
                 ctrl._ColliderTbl = chain.colliders
                     .Select(c => c.name != null && madeColliders.TryGetValue(c.name, out var m) ? m : null)
