@@ -264,6 +264,12 @@ namespace Yuni.Poc
                 var gDir = chain.@params?.gravity_direction?.V ?? Vector3.up;
                 var gVal = chain.@params?.gravity?.startValue ?? -10f;
                 ctrl._Gravity = gDir.sqrMagnitude > 0f ? gDir.normalized * gVal : new Vector3(0f, gVal, 0f);
+
+                // 反復回数。既定はどちらも 1 で、コリジョンの押し出しと拘束が
+                // 毎フレーム押し合いになり布が振動する。
+                // Relaxation = 拘束の反復、SubSteps = 時間刻みの分割
+                ctrl._Relaxation = 3;
+                ctrl._SubSteps = 2;
                 ctrl._StructuralShrinkVertical = 1.0f;
                 ctrl._StructuralStretchVertical = 0.1f;
                 ctrl._StructuralShrinkHorizontal = 1.0f;
@@ -314,6 +320,10 @@ namespace Yuni.Poc
                         if (pt == null) continue;
                         var rate = Mathf.Clamp01(pt._Depth / ctrl.MaxPointDepth);
                         if (rad != null) { pt._PointRadius = rad.At(rate); maxR = Mathf.Max(maxR, pt._PointRadius); }
+                        // 注意: SPCR の _Mass は風力にしか使われない
+                        // (ExternalForce += WindForce * WindForceScale / Mass)。
+                        // 拘束ソルバは参照しないため、v1 の質量カーブは実質的に移らない。
+                        // 忠実さのため入れてはいるが、挙動には効かない
                         if (mass != null) pt._Mass = mass.At(rate);
                         EditorUtility.SetDirty(pt);
                     }
@@ -324,7 +334,8 @@ namespace Yuni.Poc
                 var line = $"{chain.name}: ルート {rootPoints.Count} 本 / " +
                            $"Point {ctrl.PointTbl?.Length ?? 0} 個 / コライダ {ctrl._ColliderTbl.Length} 個 / " +
                            $"粒子半径 最大 {maxR:F3} / 重力 {ctrl._Gravity.y:F1} / " +
-                           $"輪 {(ctrl._IsLoopRootPoints ? "はい" : "いいえ")} / 並べ替え {sortNote}";
+                           $"輪 {(ctrl._IsLoopRootPoints ? "はい" : "いいえ")} / 並べ替え {sortNote} / " +
+                           $"反復 {ctrl._Relaxation}x{ctrl._SubSteps}";
                 summary.Add(line);
                 Debug.Log("[PoC-2] " + line);
             }
