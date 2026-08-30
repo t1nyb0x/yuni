@@ -235,6 +235,7 @@ def main() -> int:
 
     colliders = []
     chains = []
+    others = []
 
     for fid, blk in mb.items():
         name = owner_name(fid)
@@ -271,6 +272,13 @@ def main() -> int:
             else:
                 entry["radius"] = num(t, "radius")
             colliders.append(entry)
+
+        elif "Mesh Cloth" in name or "Virtual Deformer" in name or "Spring" in name:
+            # BoneCloth 以外の v1 コンポーネント。SPCR に相当物が無い可能性が高いので
+            # 「見つけた」ことだけは必ず記録する。黙って落とすと変換漏れに気づけない
+            others.append({"name": name, "mono_file_id": fid,
+                           "kind": "mesh_cloth" if "Mesh Cloth" in name
+                                   else ("virtual_deformer" if "Virtual Deformer" in name else "spring")})
 
         elif "Bone Cloth" in name or "BoneCloth" in name:
             root_fids = section_refs(t, "rootList")
@@ -332,9 +340,11 @@ def main() -> int:
             "mono_behaviours": len(mb),
             "chains": len(chains),
             "colliders": len(colliders),
+            "unconvertible": len(others),
         },
         "chains": chains,
         "colliders": colliders,
+        "unconvertible": others,
     }
 
     text = json.dumps(result, indent=2, ensure_ascii=False)
