@@ -1,6 +1,12 @@
 # ADR-0001: クロスとエモートのために Unity で作り直す
 
-- 状態: **採用**（ただし PoC-1 の結果により覆りうる。「影響」節を参照）
+- 状態: **採用。ただし 2 点を [ADR-0004](0004-unitypackage-first-coexist-with-moca.md) が改訂した**
+
+> **改訂点（2026-08-31）**
+> 1. 「Yuni は moca の**完全な後継**である」→ **撤回。** 棲み分けの違う姉妹製品とする（moca = VRM、Yuni = unitypackage）
+> 2. 「moca は Yuni が 1.0 に到達した時点で**保守を終了する**」→ **撤回。** 恒久的に共存する
+>
+> **Unity 化の技術的論拠と、払うコストの見積りは変わらない。** 本 ADR の他の記述は有効である。
 - 決定日: 2026-08-30
 - 関連: [moca ADR-0017](https://github.com/t1nyb0x/moca/blob/main/docs/adr/0017-vrm-pmx-only.md)、`../feasibility.md`、`../requirements.md`
 
@@ -39,7 +45,9 @@ moca v0.7.0 は感情に応じた姿勢表現（F-14）を実装したが、そ�
 
 **Yuni として、moca を Unity で作り直す。**
 
-moca ADR-0017 が代替案「案 2: moca を Unity で再実装」として一度退けた選択肢を、**別プロダクトとして**採る。moca は Yuni が 1.0 に到達した時点で保守を終了する。
+moca ADR-0017 が代替案「案 2: moca を Unity で再実装」として一度退けた選択肢を、**別プロダクトとして**採る。
+
+> ~~moca は Yuni が 1.0 に到達した時点で保守を終了する。~~ **撤回（[ADR-0004](0004-unitypackage-first-coexist-with-moca.md)）。恒久的に共存する。**
 
 技術的な骨格は次のとおり（`feasibility.md` 第 3 章で検証済み）。
 
@@ -105,7 +113,9 @@ LLM アダプタも、外部インターフェース仕様（moca 要件 7.1〜7
 
 ### この決定が覆る条件
 
-**PoC-1 が通らなかった場合、この ADR は廃止する。**
+**ゲートの PoC が通らなかった場合、この ADR は廃止する。**
+
+> **ゲートは PoC-1 から PoC-2（モデルバンドル経路）へ移った**（[ADR-0004](0004-unitypackage-first-coexist-with-moca.md)）。以下の PoC-1 に関する記述は、VRM 経路の話として読むこと。
 
 PoC-1 は「ランタイム読込した任意の VRM へ MagicaCloth2 を自動適用し、座りモーションで貫通しないこと」を確かめる（`feasibility.md` 第 7 章）。これが通らなければ P-2 は解けず、Unity 化は moca に対する優位を持たない。**その場合、moca ADR-0017 の判断が正しかったことになる。** 縮退先は上記「案 B」である。
 

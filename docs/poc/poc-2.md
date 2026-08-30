@@ -1,0 +1,168 @@
+# PoC-2: モデルバンドル経路（**企画のゲート**）
+
+- 状態: **未実施**
+- 位置づけ: **企画のゲート**（要件定義書 D-1 / D-6）。これが通らなければ Yuni を作らない
+- 関連: [ADR-0004](../adr/0004-unitypackage-first-coexist-with-moca.md)、[ADR-0003](../adr/0003-spcr-as-default-cloth-backend.md)、`../feasibility.md` 3.2 節
+
+---
+
+## 0. なぜこれがゲートなのか
+
+Yuni の主目的は **unitypackage 配布モデルを、作者が設定したシェーダとクロスのまま動かすこと**である（A-3、[ADR-0004](../adr/0004-unitypackage-first-coexist-with-moca.md)）。VRM は moca に任せる。
+
+したがって確かめるべきは「任意の VRM へクロスを自動構成できるか」（PoC-1）ではなく、**「手元の unitypackage モデルが、作者の作り込みを保ったまま座れるか」**である。
+
+**この変更で最大の技術リスクが外れた。** モデルバンドル経路は Unity Editor 上でクロスを構成して焼き込むため、**SPCR のランタイム構築（R-12）を必要としない。** SPCR が本来想定しているエディタ操作の範囲で済む。
+
+---
+
+## 1. 何を確かめるのか
+
+**Tokyo6 の配布モデルを、lilToon のマテリアルと作者のクロス設定を保ったまま AssetBundle 化し、Yuni 側で読んで座らせ、衣装が脚を貫通しないこと。**
+
+### 判定基準
+
+| # | 基準 |
+|---|---|
+| **合格** | Tokyo6 3 体（Chifuyu / Karin / Rikka）**すべて**で、座り動作中に衣装が脚を貫通しないこと。かつマテリアルが正しく描画されること |
+| **要再判断** | 1 体でもモデル固有の手当てが必要になった場合。**その手当ての量を記録してから**判断する |
+| **不合格** | 変換が原理的に成立しない、または手当ての量が「モデルごとに人手」の水準に達する場合 |
+
+**「要再判断」を安易に「合格」へ寄せないこと。** モデルごとの手当てが際限なく必要になる構造は、moca が PMX で踏んで撤退した轍そのものである（moca ADR-0015 / R-12）。
+
+### 副次的に測ること
+
+- **v1 の詰め値のうち、どこまで SPCR へ移せるか**（移せない項目の一覧が F-18-5 のプレビュー要件になる）
+- AssetBundle のファイルヘッダから `UnityFS` シグネチャとエンジンバージョンを読めるか（要件 1.3.1 節の前提。**崩れると自作コンテナの検討に戻る**）
+- Unity バージョンをずらしたときに何が起きるか（読めないのか、静かに壊れるのか）
+- 不正なバイト列を掴ませたときに落ちないか
+- ビルドサイズと起動時間（要件 4.2 の目標値確定、U-7）
+
+---
+
+## 2. 環境
+
+**[poc-1.md](poc-1.md) 2 節と同じプロジェクトを使う。** 構築済みの内容:
+
+| 項目 | 状態 |
+|---|---|
+| Unity | ✅ `6000.0.82f1`（[ADR-0002](../adr/0002-unity-6000-0-lts.md)） |
+| レンダーパイプライン | ✅ Built-in RP |
+| SPCR JointDynamics | ✅ v2.0.11（`com.unity.burst` 1.8.30 と併せて導入済み） |
+| UniVRM | ✅ |
+| lilToon | ✅ 2.3.4 |
+| Tokyo6 モデル | ✅ `C:\dev\yuni-assets\Tokyo6_*.unitypackage` 3 体 |
+
+**追加で要るもの**: 座りモーション 1 本（[Mixamo](https://www.mixamo.com/) で `Sitting` → FBX for Unity → Rig を Humanoid に）。
+
+> **`.gitignore` を確認すること。** `Assets/Tokyo6/` と `*.fbx` は除外済みだが、各ステップ後に `git status --short` を目視すること。**モデルの再配布は後から取り消せない**（NF-L-5）。
+
+---
+
+## 3. 手順
+
+### Step 1 — 【関門 A】モデルが描画されるか
+
+1. `Assets → Import Package → Custom Package` で `Tokyo6_Chifuyu.unitypackage` を取り込む
+2. `Assets/Tokyo6/Characters/Chifuyu/Prefab/Chifuyu Variant.prefab` をシーンへ置く
+
+| 確認 | 期待 |
+|---|---|
+| マテリアル | **lilToon で正しく描画される**（ピンクなら lilToon が効いていない） |
+| Missing Script | **7 件出る**（MagicaCloth v1 の分。想定どおりで故障ではない） |
+| 揺れ物 | **一切動かない**（v1 を持っていないため） |
+
+**Missing Script の内訳**（[ADR-0003](../adr/0003-spcr-as-default-cloth-backend.md) の実測）:
+`Magica Bone Cloth_Skirt` / `Magica Bone Cloth_Hair` / `Magica Capsule Collider` ×3 / `Magica Sphere Collider` ×2
+
+### Step 2 — 【関門 B】貫通を再現させる
+
+**変換を書く前に、問題が起きることを目で見ること。**
+
+座りモーションを再生する。**クロスが完全に無い状態なので、確実に貫通する。** これが基準点になる。
+
+### Step 3 — v1 の構成を読み出す
+
+**MagicaCloth v1 を所持していなくても読める。** プレハブは YAML であり、Missing Script になっていても**シリアライズされた値は保持されている。**
+
+Chifuyu で実測済みの内容（[ADR-0003](../adr/0003-spcr-as-default-cloth-backend.md)）:
+
+```
+clothTarget.rootList: 14 本         ← スカートのチェーンのルートボーン
+teamData.colliderList: 2 個          ← 当てる相手（太もも 2 本だけ）
+Capsule (LegD_L/R): length 0.137, startRadius 0.057, endRadius 0.058
+Capsule (Chest):    length 0.068, radius 0.1
+Sphere  (Head) ×2:  radius 0.07 / 0.057
+```
+
+**注目すべきは、スカートに割り当てられたコライダが太もも 2 本だけであること。** 胸も頭も衝突相手に入っていない。**当てる相手を増やすほど良いのではなく、絞り込みが正解**らしい。まずこの構成をそのまま再現すること。
+
+**読み出したものは「クロス中間表現」へ落とすこと**（要件 F-17-13）。ソルバ固有の型をここへ持ち込まない。バックエンドを差し替えるときに効いてくる。
+
+### Step 4 — SPCR へ変換して Unity Editor 上で構成する
+
+**ここが PoC-1 との決定的な違いである。実行時構築は要らない。**
+
+中間表現から SPCR の `SPCRJointDynamicsController` と `SPCRJointDynamicsCollider` を組む。**SPCR が想定しているエディタ操作の範囲**で済むため、README とサンプル（`Character.unity`）がそのまま参考になる。
+
+| v1 | SPCR |
+|---|---|
+| `clothTarget.rootList` | ルートボーン群 |
+| `Magica Capsule Collider` | `SPCRJointDynamicsCollider`（height > 0 でカプセル） |
+| `Magica Sphere Collider` | `SPCRJointDynamicsCollider`（height = 0 で球） |
+| `teamData.colliderList` | どのコライダに当てるかの指定 |
+| 質量カーブ、`worldMoveInfluence` 等 | **移らない。** 見ながら合わせる |
+
+**移せなかった項目を一覧で記録すること。** それが F-18-5（Packager のプレビュー）の要件になる。
+
+### Step 5 — AssetBundle として焼く
+
+`BuildPipeline.BuildAssetBundles` で prefab を焼く。**独自コンテナで包まないこと**（D-4）。
+
+### Step 6 — Yuni 側で読んで座らせる
+
+1. **ロード前にファイルヘッダを読んで互換性を判定する**（F-18-8）
+2. ロードして prefab を実体化する
+3. 座りモーションを再生する
+4. **衣装が脚を貫通しないことを目視で確認する**
+
+### Step 7 — 残る 2 体で繰り返す
+
+**Karin と Rikka でも同じ手順が通ること。** ここで初めて「モデルごとの手当てが要るか」が分かる。1 体目だけで判断しないこと。
+
+---
+
+## 4. 詰まりそうなところ
+
+| # | 想定 | 対処 |
+|---|---|---|
+| 1 | マテリアルがピンク | lilToon が効いていない。シェーダの解決先を確認する |
+| 2 | Missing Script の値が読めない | Unity の Inspector では見えないが、**プレハブを YAML として直接読めば取れる**。ADR-0003 の実測がその方法 |
+| 3 | SPCR のコライダ指定が v1 と概念的に合わない | 中間表現の切り方を疑う。**当てる相手の絞り込み（太もも 2 本）が再現できているか**をまず確認する |
+| 4 | AssetBundle でマテリアルが壊れる | シェーダがバンドルに含まれているか確認する |
+| 5 | プレイヤー側で Missing Script になる | **F-18-4 のホワイトリストの話。** 剥がし忘れか、プレイヤーにアセンブリが無い |
+| 6 | 特定のモデルだけ壊れる | **これが「要再判断」の入口である。** 手当てせずにまず記録する |
+
+---
+
+## 5. 記録すること
+
+判定に必要なのは印象ではなく事実である。**次を書き残してから判定すること。**
+
+- 3 体それぞれの結果（貫通する / しない / 条件付き）
+- **v1 → SPCR で移せなかった設定の一覧**
+- **モデル固有の手当てを要した箇所と、その内容**
+- ヘッダからエンジンバージョンを読めたか
+- Unity バージョンをずらしたときの挙動
+- ビルドサイズと起動時間
+
+---
+
+## 6. 判定後にやること
+
+**結果が出たら ADR を書く。通っても通らなくても書く。**
+
+- **合格** → **ADR-0005** として記録し、[ADR-0001](../adr/0001-unity-for-cloth-and-emote.md) を確定させる。要件定義書の状態を「ドラフト」から進める。このブランチは破棄し、0.1 の実装を新しいブランチで始める
+- **不合格** → **ADR-0005** として記録し、**[ADR-0001](../adr/0001-unity-for-cloth-and-emote.md) を廃止する。** 縮退先は ADR-0001 の「案 B」（Unity Editor 拡張によるオフライン変換ツール）。moca 本体は無改造で済む
+
+**不合格は失敗ではない。** PoC の目的は、8 リリースぶんの労力を投じる前に答えを出すことである。ここで止まれたなら PoC は成功している。

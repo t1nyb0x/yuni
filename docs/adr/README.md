@@ -26,13 +26,16 @@
 
 | # | 決定 | 状態 |
 |---|---|---|
-| [0001](0001-unity-for-cloth-and-emote.md) | クロスとエモートのために Unity で作り直す | 採用 |
+| [0001](0001-unity-for-cloth-and-emote.md) | クロスとエモートのために Unity で作り直す | 採用（**一部を 0004 で改訂**） |
 | [0002](0002-unity-6000-0-lts.md) | Unity 6000.0 LTS に固定する | 採用 |
 | [0003](0003-spcr-as-default-cloth-backend.md) | クロスは SPCR JointDynamics を既定とし、MagicaCloth2 は対応予定に置く | 採用 |
+| [0004](0004-unitypackage-first-coexist-with-moca.md) | Yuni の主目的を unitypackage 配布モデルに置き、moca と恒久共存する | 採用 |
 
 ## moca からの継承
 
-Yuni は moca の後継である（要件定義書 0 章）。**moca の ADR-0001〜0017 は、明示的に覆すまで有効な背景として扱う。**
+Yuni は moca と**棲み分けの違う姉妹製品**である（[ADR-0004](0004-unitypackage-first-coexist-with-moca.md)）。moca = VRM、Yuni = unitypackage 配布モデル。両者は恒久的に共存する。
+
+**moca の ADR-0001〜0017 は、明示的に覆すまで有効な背景として扱う。** 仕様の正は moca 側に置き続けること（要件定義書 0 章）。
 
 とくに次の 2 つは Yuni の出発点そのものであり、読むこと。
 
