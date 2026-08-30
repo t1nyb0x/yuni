@@ -2,7 +2,7 @@
 
 - 状態: **未実施**
 - 位置づけ: **企画のゲート**（要件定義書 D-1）。これが通らなければ Yuni を作らない
-- 関連: `../feasibility.md` 3.3 節・第 7 章、`../adr/0001-unity-for-cloth-and-emote.md`
+- 関連: `../feasibility.md` 3.3 節・第 7 章、[ADR-0001](../adr/0001-unity-for-cloth-and-emote.md)、[ADR-0003](../adr/0003-spcr-as-default-cloth-backend.md)
 
 ---
 
@@ -47,7 +47,8 @@
 | Unity | **6000.0 LTS**（[ADR-0002](../adr/0002-unity-6000-0-lts.md)）。パッチは `ProjectSettings/ProjectVersion.txt` を正とする |
 | レンダーパイプライン | **Built-in RP**（下記） |
 | UniVRM | v0.130.1 以降 |
-| MagicaCloth2 | 各自のライセンスでインポート。**`.gitignore` 済み。コミットしないこと** |
+| **SPCR JointDynamics** | **既定のクロスバックエンド。MIT。** GitHub から取得（[SPARK-inc/SPCRJointDynamics](https://github.com/SPARK-inc/SPCRJointDynamics)）。**MIT なのでコミットしてよい** |
+| MagicaCloth2 | **不要。** 対応予定であり 1.0 の実装対象ではない（[ADR-0003](../adr/0003-spcr-as-default-cloth-backend.md)）。SPCR が立たなかったときの切り替え先 |
 | 検証用 VRM | 各自で用意。**コミットしないこと**（`.gitignore` 済み、要件 NF-L-5） |
 
 > **なぜ URP ではなく Built-in RP なのか。** [VRM 0.x には URP 対応の MToon が無い](https://vrm.dev/api/material/urp/)。URP を選ぶと VRM 0.x のマテリアルが壊れ、**検証用モデルを VRM 1.0 に限定することになる。** PoC-1 で確かめたいのはクロスの挙動であって描画ではないため、変数を 1 つ減らす。
@@ -58,11 +59,11 @@
 
 1. Unity Hub で 6000.0 LTS の 3D (Built-in Render Pipeline) プロジェクトを `unity/` 配下に作成する
 2. UniVRM を導入する（UnityPackage または UPM）
-3. MagicaCloth2 をインポートする
+3. SPCR JointDynamics を導入する。**まず Unity 6 でコンパイルが通るかを確認する**（最終コミットが 2023-10 で約 3 年止まっている。リスク R-13）
 4. `ProjectSettings/ProjectVersion.txt` の値を [ADR-0002](../adr/0002-unity-6000-0-lts.md) へ追記する
 5. 検証用 VRM を 3 体以上、リポジトリ**外**に置く
 
-> **`.gitignore` を先に確認すること。** MagicaCloth2 と `*.vrm` は除外済みだが、`git status` で意図しないものが上がっていないか目視すること。Asset Store EULA 違反とモデルの再配布は、後から取り消せない。
+> **`.gitignore` を先に確認すること。** `*.vrm` と MagicaCloth2 は除外済み。**SPCR と lilToon は MIT なのでコミットしてよい**（NF-L-6 により LICENSE を添えること）。`git status` で意図しないものが上がっていないか目視すること。モデルの再配布は後から取り消せない。
 
 ---
 
@@ -80,7 +81,7 @@ GameObject（Humanoid Animator つき）
    │
    ├─▶ ② Humanoid ボーンから人体カプセルコライダを生成する ★ここが本命
    │
-   ├─▶ ③ ①のチェーンを MagicaCloth2 の BoneCloth として構築し、②を衝突相手に入れる
+   ├─▶ ③ ①のチェーンを SPCR の構成として実行時に構築し、②を衝突相手に入れる
    │
    └─▶ ④ VRM 側の SpringBone を止める（二重駆動の防止）
    │
@@ -88,7 +89,7 @@ GameObject（Humanoid Animator つき）
 座りモーションを再生して目視する
 ```
 
-**★ ② が本命である。** ① と ③ は「揺れ物を MagicaCloth2 に載せ替える」だけで、それ自体は貫通を直さない。**貫通を直すのは、脚と尻に押し戻す実体を与える ② である。** VRM SpringBone が「垂れて押しのけられるだけ」なのは、押し戻す相手が居ないからである。
+**★ ② が本命である。** ① と ③ は「揺れ物を押し戻せるソルバへ載せ替える」だけで、それ自体は貫通を直さない。**貫通を直すのは、脚と尻に押し戻す実体を与える ② である。** VRM SpringBone が「垂れて押しのけられるだけ」なのは、押し戻す相手が居ないからである。
 
 ### 3.2 ① SpringBone 定義の読み出し
 
@@ -97,7 +98,9 @@ VRM 0.x と 1.0 で API が異なる。両方に触れておくこと。**どち
 - **VRM 1.0** — `Vrm10Instance` の SpringBone 情報から、各 Spring のジョイント列（Transform の連なり）とコライダグループを得る
 - **VRM 0.x** — シーン中の `VRMSpringBone` コンポーネントから RootBones を得る
 
-得たいのは **チェーンの根になる Transform の集合**だけでよい。MagicaCloth2 の BoneCloth は `rootBones` を与えれば以下の階層を辿る。
+得たいのは **チェーンの根になる Transform の集合**だけでよい。ボーン駆動のクロスはいずれも、根を与えれば以下の階層を辿る。
+
+**この段階で「クロス中間表現」へ落とすこと**（要件 F-17-13）。ソルバ固有の型をここへ持ち込まないこと。バックエンドを差し替えるときに効いてくる。
 
 > **要確認。** UniVRM のバージョンによって型名・プロパティ名が変わる。実際にインポートした版の API を見て書くこと。ここを推測で書くと動かないコードに時間を溶かす。
 
@@ -124,27 +127,29 @@ VRM 0.x と 1.0 で API が異なる。両方に触れておくこと。**どち
 
 **太らせすぎに注意。** コライダが実体より太いと、衣装が体から浮いて見える。貫通は消えるが不自然になる。**貫通と浮きのどちらもある閾値を探すのではなく、どちらが許容できるかを決めること。**
 
-### 3.4 ③ MagicaCloth2 への構築
+### 3.4 ③ SPCR への構築 — **PoC-1 最大の未知**
 
-公式の [Runtime Construction](https://magicasoft.jp/en/mc2_runtime_build/) に従う。
+**SPCR にはランタイム構築の公式ドキュメントが無い。** README はエディタ操作前提であり、「コンポーネントを付けてボタンを押す」流れで書かれている。
 
-```csharp
-var cloth = obj.AddComponent<MagicaCloth>();
-var sdata = cloth.SerializeData;
-sdata.clothType = ClothProcess.ClothType.BoneCloth;
-sdata.rootBones.Add(chainRoot);
-// ② で作ったコライダを衝突相手として登録する ← フィールド名は要確認
-cloth.BuildAndRun();
-```
+**したがってここは調査から始まる。**
 
-**注意点（公式記載）**
+1. `SPCRJointDynamicsController` がボーン列とコライダをどう受け取るかを**ソースで確認する**
+2. エディタ側の構築処理（拘束の生成など）がどこにあるかを特定する
+3. **それを実行時から呼べるか**を確かめる。呼べなければ、必要部分を抜き出して自前の初期化経路を作る
+4. 最終コミットで追加された `SPCRJointDynamicsHelper` を最初に読む。名前からして構築の補助である可能性がある
 
-- 構築は別スレッドで走り、**完了まで数フレームかかる。** 構築中の見た目をどうするかを決めること（要件 F-17-9）
-- MeshCloth は頂点属性の指定が必須。**PoC-1 では BoneCloth のみを扱う。** MeshCloth（P-3）は 1.0 の条件外（要件 F-17-10）
+**MIT であることがここでの武器である。** ソースを読めるし、必要なら手を入れて自分のリポジトリへ取り込める。有償の閉じたアセットではこの手が使えない。
+
+> **タイムボックスを切ること。** ここで見通しが立たない状態が続いたら、粘らずに MagicaCloth2（公式のランタイム構築 API を持つ）へ切り替えて先へ進む。**確かめたいのは「自動適用で貫通が直るか」であって「SPCR が使えるか」ではない。** [ADR-0003](../adr/0003-spcr-as-default-cloth-backend.md)
+
+**共通の注意点**
+
+- 構築には時間がかかる。構築中の見た目をどうするかを決めること（要件 F-17-9）
+- **PoC-1 では BoneCloth 相当（ボーン駆動）のみを扱う。** SPCR に MeshCloth 相当は無く、P-3 は 1.0 の条件外（要件 F-17-10）
 
 ### 3.5 ④ VRM 側 SpringBone の停止
 
-**忘れると二重駆動になる。** MagicaCloth2 と VRM SpringBone が同じボーンを取り合い、震える・伸びるなどの分かりにくい壊れ方をする。
+**忘れると二重駆動になる。** クロスと VRM SpringBone が同じボーンを取り合い、震える・伸びるなどの分かりにくい壊れ方をする。
 
 VRM 1.0 は SpringBone のランタイム実装を差し替え可能。VRM 0.x は `VRMSpringBone` コンポーネントを無効化する。
 
@@ -161,7 +166,8 @@ VRM 1.0 は SpringBone のランタイム実装を差し替え可能。VRM 0.x �
 | # | 想定 | 対処 |
 |---|---|---|
 | 1 | UniVRM の SpringBone API がバージョンで違う | 推測で書かず、インポートした版のコードを見る |
-| 2 | MagicaCloth2 のコライダ登録フィールド名が分からない | `RuntimeBuildDemo.cs`（公式サンプル）を読む |
+| 2 | **SPCR を実行時に構築できない** | **最大のリスク（R-12）。** 3.4 節。タイムボックスを超えたら MagicaCloth2 へ切り替える |
+| 2b | SPCR が Unity 6 でコンパイルすら通らない | **リスク R-13。** 2 節の手順 3 で最初に確認する。MIT なので自分で直せるが、直す量が多いなら判断材料にする |
 | 3 | 二重駆動で震える | 3.5 節。**まずこれを疑う** |
 | 4 | コライダを入れても貫通する | チェーンの根が正しいか、コライダが衝突相手として登録されているかを順に確認する |
 | 5 | 衣装が体から浮く | コライダが太すぎる。3.3 節 |
@@ -178,6 +184,7 @@ VRM 1.0 は SpringBone のランタイム実装を差し替え可能。VRM 0.x �
 - 生成したコライダの数と寸法比率
 - **モデル固有の手当てを要した箇所と、その内容**
 - クロス構築にかかった時間
+- **SPCR のランタイム構築に要した調査・実装の量**（U-14 とバックエンド選定の判断材料）
 - 二重駆動・浮き・震えなど、貫通以外に起きたこと
 
 ---
@@ -186,7 +193,7 @@ VRM 1.0 は SpringBone のランタイム実装を差し替え可能。VRM 0.x �
 
 **結果が出たら ADR を書く。通っても通らなくても書く。**
 
-- **合格** → ADR-0003 として記録し、[ADR-0001](../adr/0001-unity-for-cloth-and-emote.md) を確定させる。要件定義書の状態を「ドラフト」から進める。このブランチは破棄し、0.1 の実装を新しいブランチで始める
-- **不合格** → ADR-0003 として記録し、**[ADR-0001](../adr/0001-unity-for-cloth-and-emote.md) を廃止する。** 縮退先は ADR-0001 の「案 B」（Unity Editor 拡張によるオフライン変換ツール）。moca 本体は無改造で済む
+- **合格** → **ADR-0004** として記録し、[ADR-0001](../adr/0001-unity-for-cloth-and-emote.md) を確定させる。要件定義書の状態を「ドラフト」から進める。このブランチは破棄し、0.1 の実装を新しいブランチで始める
+- **不合格** → **ADR-0004** として記録し、**[ADR-0001](../adr/0001-unity-for-cloth-and-emote.md) を廃止する。** 縮退先は ADR-0001 の「案 B」（Unity Editor 拡張によるオフライン変換ツール）。moca 本体は無改造で済む
 
 **不合格は失敗ではない。** PoC の目的は、6 リリースぶんの労力を投じる前に答えを出すことである。ここで止まれたなら PoC は成功している。

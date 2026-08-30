@@ -28,6 +28,7 @@
 |---|---|---|
 | [0001](0001-unity-for-cloth-and-emote.md) | クロスとエモートのために Unity で作り直す | 採用 |
 | [0002](0002-unity-6000-0-lts.md) | Unity 6000.0 LTS に固定する | 採用 |
+| [0003](0003-spcr-as-default-cloth-backend.md) | クロスは SPCR JointDynamics を既定とし、MagicaCloth2 は対応予定に置く | 採用 |
 
 ## moca からの継承
 
