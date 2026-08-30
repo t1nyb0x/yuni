@@ -58,7 +58,7 @@ Sphere  (Head) ×2:  radius 0.07 / 0.057
 | 実装 | 状態 | 位置づけ |
 |---|---|---|
 | `SpcrClothBackend` | **1.0 の実装対象** | 既定。[SPCR JointDynamics](https://github.com/SPARK-inc/SPCRJointDynamics)（MIT）。**リポジトリに同梱する** |
-| `MagicaClothBackend` | **対応予定。インターフェースのみ確定** | 任意。所持者が有効化する。品質と MeshCloth（P-3）が要るとき |
+| `MagicaClothBackend` | **対応予定。インターフェースのみ確定** | 任意。所持者が有効化する。**理由は品質のみ**（下記） |
 | `NullClothBackend` | 1.0 の実装対象 | 最終退避。UniVRM の SpringBone へ委譲 |
 
 **MagicaCloth2 は「実装しないが、インターフェースは今の段階で確定させる」扱いとする。** これは moca が `SpeechSynthesizer` に対して採った手法と同じである（moca アーキテクチャ 2.3 節: 「MVP では実装しないが、`SpeakStyle` の型と `emotion_axes` の存在を今の段階で確定させておく」）。
@@ -118,7 +118,7 @@ MIT で、VRM エコシステムでの採用実績もある。
 | 1 | **SPCR のランタイム構築が未文書。** README はエディタ操作前提 | **MIT でソースが読めるため、エディタ側の構築処理を実行時に呼べる形へ自前で持っていける。** これは有償の閉じたアセットには使えない手である。最終コミットで追加された `SPCRJointDynamicsHelper` を最初に読むこと |
 | 2 | ~~**最終コミットが 2023-10。約 3 年更新が止まっている**~~ | **2026-08-30 実測により大幅に低下。** Unity 6000.0.82f1 で **SPCR v2.0.11 が無修正でコンパイル成功**（エラー 0 / 非推奨警告 4）。警告はすべて `FindObjectOfType` 系の API 非推奨であり、動作には影響しない。**API 不整合による破綻は起きていない。** 更新停止＝Unity 6 で動かない、ではなかった |
 | 3 | 品質が MagicaCloth2 に劣る可能性 | PoC-1 の判定基準（VRM 3 体以上で貫通しない）で測る。**主観で「まあ動く」と言わないこと** |
-| 4 | MeshCloth 相当が無い | P-3（ボーン無し衣装）は解けない。**元々 1.0 の条件外**（要件 F-17-10）。変更なし |
+| 4 | ~~MeshCloth 相当が無い~~ | **[ADR-0005](0005-yuni-always-builds-cloth.md) により無害化した。** クロスは常に Yuni が BoneCloth で構成するため、作者が MeshCloth を使っていても関係なくなった。真に残るのは「ボーンが 1 本も無い衣装」だけで、これは元から 1.0 の条件外である。**MagicaCloth2 を採用する理由から MeshCloth が外れ、品質だけが残った** |
 
 ### 実測で判明した落とし穴（2026-08-30）
 
