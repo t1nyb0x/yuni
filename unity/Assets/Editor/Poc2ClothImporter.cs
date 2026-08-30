@@ -276,8 +276,17 @@ namespace Yuni.Poc
                     .Where(m => m != null)
                     .ToArray();
 
-                // 拘束を組む。エディタのボタンが呼んでいるものと同じ
-                ctrl.UpdateJointConnection();
+                // チェーンが胴を一周しているか（スカート）を形状から判定する。
+                // 名前では決めない。閉じているなら水平方向の拘束を輪にする必要がある
+                ctrl._IsLoopRootPoints = IsClosedRing(rootPoints);
+
+                // 拘束を組む。**並べ替え付きの版を呼ぶこと。**
+                // 素の UpdateJointConnection() は _RootPointTbl の順序をそのまま使うため、
+                // v1 の rootList の並び（空間的に隣り合っていない）で水平拘束が張られ、
+                // スカートが引き裂かれる。SortConstraintsHorizontalRoot は根を空間的に
+                // 並べ替えたうえで内部で UpdateJointConnection() を呼ぶ
+                ctrl.SortConstraintsHorizontalRoot(
+                    SPCRJointDynamicsController.UpdateJointConnectionType.SortNearPointXZ);
 
                 // ここで _Depth と MaxPointDepth が確定するので、v1 のカーブを転記する。
                 // _PointRadius は SPCR の押し出し計算 PushoutFromSphere() が使う「布の厚み」であり、
@@ -301,7 +310,8 @@ namespace Yuni.Poc
 
                 var line = $"{chain.name}: ルート {rootPoints.Count} 本 / " +
                            $"Point {ctrl.PointTbl?.Length ?? 0} 個 / コライダ {ctrl._ColliderTbl.Length} 個 / " +
-                           $"粒子半径 最大 {maxR:F3} / 重力 {ctrl._Gravity.y:F1}";
+                           $"粒子半径 最大 {maxR:F3} / 重力 {ctrl._Gravity.y:F1} / " +
+                           $"輪 {(ctrl._IsLoopRootPoints ? "はい" : "いいえ")}";
                 summary.Add(line);
                 Debug.Log("[PoC-2] " + line);
             }
@@ -313,6 +323,32 @@ namespace Yuni.Poc
             Debug.Log("[PoC-2] 完了\n" + report);
             EditorUtility.DisplayDialog("PoC-2 変換結果",
                 report + "\n\nルートが 0 本なら fileID の突き合わせが失敗しています。", "OK");
+        }
+
+        /// 根が胴を一周しているか（＝スカートのような閉じた輪か）を形状から判定する。
+        /// XZ 平面上で重心まわりの角度を並べ、最大の隙間が小さければ閉じているとみなす。
+        /// 名前で判定しないのは、モデルごとに命名が違うためである。
+        static bool IsClosedRing(List<SPCRJointDynamicsPoint> pts)
+        {
+            if (pts.Count < 4) return false;
+
+            var center = Vector3.zero;
+            foreach (var p in pts) center += p.transform.position;
+            center /= pts.Count;
+
+            var angles = new List<float>();
+            foreach (var p in pts)
+            {
+                var d = p.transform.position - center;
+                angles.Add(Mathf.Atan2(d.z, d.x) * Mathf.Rad2Deg);
+            }
+            angles.Sort();
+
+            float maxGap = 360f + angles[0] - angles[angles.Count - 1];   // 最後から最初へ回り込む隙間
+            for (int i = 1; i < angles.Count; ++i)
+                maxGap = Mathf.Max(maxGap, angles[i] - angles[i - 1]);
+
+            return maxGap < 90f;
         }
 
         /// v1 の axis(0=X,1=Y,2=Z) を SPCR の規約(常に Y)へ合わせる補正回転。
