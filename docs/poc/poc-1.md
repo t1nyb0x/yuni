@@ -55,15 +55,134 @@
 >
 > **製品側の RP をどちらにするかは別の判断であり、まだ決めていない**（要件定義書 U-13）。F-01-3 が VRM 0.x / 1.0 の両対応を要求している一方、UniWinC_VRM は URP を採っている。**PoC-1 の後に ADR で決めること。** ここでの Built-in RP はその判断を先取りしない。
 
-### 手順
+### 環境構築の手順
 
-1. Unity Hub で 6000.0 LTS の 3D (Built-in Render Pipeline) プロジェクトを `unity/` 配下に作成する
-2. UniVRM を導入する（UnityPackage または UPM）
-3. SPCR JointDynamics を導入する。**まず Unity 6 でコンパイルが通るかを確認する**（最終コミットが 2023-10 で約 3 年止まっている。リスク R-13）
-4. `ProjectSettings/ProjectVersion.txt` の値を [ADR-0002](../adr/0002-unity-6000-0-lts.md) へ追記する
-5. 検証用 VRM を 3 体以上、リポジトリ**外**に置く
+**関門が 2 つある。** そこを越えられなければ、その先の作業に意味が無い。順番を入れ替えないこと。
 
-> **`.gitignore` を先に確認すること。** `*.vrm` と MagicaCloth2 は除外済み。**SPCR と lilToon は MIT なのでコミットしてよい**（NF-L-6 により LICENSE を添えること）。`git status` で意図しないものが上がっていないか目視すること。モデルの再配布は後から取り消せない。
+#### Step 1 — Unity のインストール
+
+1. [Unity Hub](https://unity.com/download) をインストールする
+2. **Installs → Install Editor** から **Unity 6000.0 LTS** の最新パッチを入れる
+3. モジュール選択で **Windows Build Support (IL2CPP)** にチェックを入れる（NF-L-3。後から追加もできる）
+4. ライセンスは **Personal**（無料）でよい
+
+#### Step 2 — プロジェクト作成
+
+Unity Hub の **New project** で作る。
+
+| 項目 | 値 |
+|---|---|
+| テンプレート | **3D (Built-In Render Pipeline)** |
+| Project name | `unity` |
+| Location | `C:\dev\yuni` |
+
+`C:\dev\yuni\unity` ができる。**URP を選ばないこと**（2 節の理由）。
+
+作成後、バージョンを [ADR-0002](../adr/0002-unity-6000-0-lts.md) へ追記する。
+
+```bash
+cat /c/dev/yuni/unity/ProjectSettings/ProjectVersion.txt
+```
+
+#### Step 3 — 【関門 1】SPCR が Unity 6 でコンパイルできるか
+
+**ここが最初の関門である。** [SPCR JointDynamics](https://github.com/SPARK-inc/SPCRJointDynamics) は最終コミットが 2023-10 で約 3 年止まっており、Unity 6 での動作は誰も保証していない（リスク R-13）。
+
+1. リポジトリを取得し、`unity/Packages/SPCRJointDynamics` をプロジェクトへ入れる
+2. **Unity のコンソールを見る**
+
+| 結果 | 次の行動 |
+|---|---|
+| エラー無し | Step 4 へ |
+| エラーが数件、内容が分かる | **直す。** MIT なので改変してよい。**直した量を記録する**（U-14 の判断材料） |
+| エラーが大量、または深い | **止まる。** MagicaCloth2 への切り替えを検討する（[ADR-0003](../adr/0003-spcr-as-default-cloth-backend.md)） |
+
+**直した量を必ず記録すること。** 「動いた」だけでは、フォークして自前で保守すべきか（U-14）を後から判断できない。
+
+#### Step 4 — UniVRM
+
+[Releases](https://github.com/vrm-c/UniVRM/releases) から `UniVRM-0.1xx.x_xxxx.unitypackage` を取得し、**Assets → Import Package → Custom Package** で入れる。VRM 0.x と 1.0 の両方が入る。
+
+#### Step 5 — lilToon（PoC-1 では任意）
+
+**PoC-1 に lilToon は要らない。** VRM は UniVRM 同梱の MToon で描画されるためである。
+
+必要になるのは Tokyo6 のような unitypackage 配布モデルを開くときで、それは 0.3（F-18）の話になる。**先に入れておいても害は無い**（MIT、[BOOTH](https://booth.pm/ja/items/3087170) / [GitHub](https://github.com/lilxyzw/lilToon)）。
+
+#### Step 6 — 検証用 VRM を 3 体
+
+**[VRoid Studio](https://vroid.com/studio)（無料）で作るのが確実である。** 出力されるモデルは揺れ物（SpringBone）定義を必ず持つため、PoC-1 の前提を満たす。
+
+- **スカート・ロングコート・ワンピースなど、丈のある衣装にすること。** 座って脚と干渉しない衣装では検証にならない
+- **体格を変えること**（背の高い個体と低い個体）。「身長で正規化する」という設計（3.3 節）が効くかを見たい
+- VRM 1.0 で書き出す
+
+置き場所は**リポジトリの外**とする（例: `C:\dev\yuni-assets\`）。`.gitignore` で `*.vrm` は除外済みだが、そもそも中へ入れない。
+
+#### Step 7 — 座りモーション
+
+[Mixamo](https://www.mixamo.com/)（無料）で `Sitting` を検索し、**FBX for Unity** で取得する。
+
+インポート後、**Inspector → Rig → Animation Type を Humanoid** にして Apply する。**ここを忘れるとリターゲティングが効かない。**
+
+#### Step 8 — 【関門 2】貫通を再現させる
+
+**スクリプトを書く前に、問題が起きることを自分の目で見ること。**
+
+1. シーンへ VRM を置く
+2. Animator Controller に座りクリップを入れ、モデルへ割り当てる
+3. Play
+
+**この時点でスカートが脚を貫通するはずである。**
+
+| 結果 | 意味 |
+|---|---|
+| 3 体とも貫通する | 想定どおり。Step 9 へ |
+| 貫通しない個体がある | **記録する。** なぜ貫通しないのかが、そのまま解決の手がかりになる |
+| そもそも座らない | Humanoid 設定（Step 7）を疑う |
+
+**直すべきものが見えていない状態で直し始めないこと。** 何が効いたのか分からなくなる。
+
+#### Step 9 — ここから実装
+
+①〜④（3 節）を書く。**3.4 節（SPCR の実行時構築）が最大の未知**であり、ここから先は調査と実装が混ざる。
+
+---
+
+### 参考: 実モデルのコライダ寸法
+
+3.3 節の「太ももの半径をどう決めるか」（U-5）について、**プロが実際に付けた値**が手元にある。Tokyo6 の Chifuyu が MagicaCloth v1 で設定していたものである。
+
+| 部位 | 形状 | 寸法 |
+|---|---|---|
+| 太もも（左右） | カプセル | length 0.137 / startRadius 0.057 / endRadius 0.058 |
+| 胸 | カプセル | length 0.068 / radius 0.1 |
+| 頭 | 球 | radius 0.07 / 0.057 |
+
+**そしてスカートに割り当てられたコライダは太もも 2 本だけだった。** 胸も頭も、スカートの衝突相手には入っていない。
+
+これは強い示唆である。**当てる相手を増やすほど良いのではなく、「スカートは太ももにだけ当てる」という絞り込みが正解**らしい。3.3 節では腰・すね・胴・上腕まで挙げているが、**まず太ももだけで試すこと。** それで足りるならそこで止める。
+
+Unity 上でモデルの身長を測れば比率が出る。自前の生成ロジックの答え合わせに使うこと。
+
+### コミットの可否
+
+| 対象 | 可否 |
+|---|---|
+| SPCR JointDynamics（MIT） | ✅ コミットする。LICENSE を添える（NF-L-6） |
+| lilToon（MIT） | ✅ 同上 |
+| UniVRM（MIT） | ✅ |
+| Unity プロジェクト本体 | ✅ `.gitignore` が `Library/` 等を除外済み |
+| 検証用 VRM | ❌ **絶対に入れない**（NF-L-5） |
+| Tokyo6 の unitypackage | ❌ **絶対に入れない** |
+| MagicaCloth2 | ❌（そもそも PoC-1 では使わない） |
+
+**各ステップの後に `git status` を目視すること。** モデルの再配布は後から取り消せない。
+
+```bash
+cd /c/dev/yuni && git status --short
+```
+
 
 ---
 
