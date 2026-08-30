@@ -1,6 +1,6 @@
 # PoC-2: モデルバンドル経路（**企画のゲート**）
 
-- 状態: **未実施**
+- 状態: **実施中（Step 1〜2 完了・関門 A / B 突破）**
 - 位置づけ: **企画のゲート**（要件定義書 D-1 / D-6）。これが通らなければ Yuni を作らない
 - 関連: [ADR-0004](../adr/0004-unitypackage-first-coexist-with-moca.md)、[ADR-0003](../adr/0003-spcr-as-default-cloth-backend.md)、`../feasibility.md` 3.2 節
 
@@ -66,20 +66,35 @@ Yuni の主目的は **unitypackage 配布モデルを、作者が設定した�
 1. `Assets → Import Package → Custom Package` で `Tokyo6_Chifuyu.unitypackage` を取り込む
 2. `Assets/Tokyo6/Characters/Chifuyu/Prefab/Chifuyu Variant.prefab` をシーンへ置く
 
-| 確認 | 期待 |
-|---|---|
-| マテリアル | **lilToon で正しく描画される**（ピンクなら lilToon が効いていない） |
-| Missing Script | **7 件出る**（MagicaCloth v1 の分。想定どおりで故障ではない） |
-| 揺れ物 | **一切動かない**（v1 を持っていないため） |
+| 確認 | 期待 | **実測（2026-08-31）** |
+|---|---|---|
+| マテリアル | lilToon で正しく描画される | ✅ **正常。** 3 種のシェーダ（`lts_o` / `lts_trans_o` / `lts_trans`）へ解決。取り込み時に 8 枚へ移行処理が走った（F-18-14 の根拠） |
+| Missing Script | **14 件**（当初 7 件と見積もったが誤り） | ✅ Inspector には `None (Mono Script)` としか出ず、**値は一切見えない** |
+| 揺れ物 | 一切動かない | ✅ 髪・スカートとも完全に静止 |
+| Humanoid | Avatar が使えること | ✅ Chifuyu の FBX は `animationType: 3`（Humanoid）で配布されており、**そのままリターゲティングできた** |
 
-**Missing Script の内訳**（[ADR-0003](../adr/0003-spcr-as-default-cloth-backend.md) の実測）:
-`Magica Bone Cloth_Skirt` / `Magica Bone Cloth_Hair` / `Magica Capsule Collider` ×3 / `Magica Sphere Collider` ×2
+**Missing Script 14 件の内訳:**
+
+| 種別 | 件数 | 変換 |
+|---|---|---|
+| 構成情報（`Magica Bone Cloth_*` ×2、コライダ ×5） | 7 | **変換対象** |
+| v1 が焼いた事前計算データ（`BoneClothData_` / `SelectionData_` / `BoneClothMeshData_`） | 7 | **捨てる。** SPCR には移せない |
 
 ### Step 2 — 【関門 B】貫通を再現させる
 
 **変換を書く前に、問題が起きることを目で見ること。**
 
 座りモーションを再生する。**クロスが完全に無い状態なので、確実に貫通する。** これが基準点になる。
+
+> **実測（2026-08-31）— 貫通を確認。基準点を取得した。**
+>
+> Mixamo の座りモーション（FBX Binary / Without Skin / 60fps）を Humanoid でリターゲットして再生。
+>
+> - **持ち上げた太ももがスカートを完全に突き抜ける。** 脚を組む姿勢のため太ももが深く食い込み、**厳しめのテストケースになっている**
+> - 髪は完全に静止（v1 の揺れ物が死んでいる証拠）
+> - 座り姿勢そのものは正常（Humanoid リターゲティングが効いている証拠）
+>
+> **スカートのボーンは 14 本あるのに 1 本も動いていない。** 揺れ物として駆動されていないためである。変換後はこれらが SPCR に駆動され、太もものコライダに押しのけられるはずである。**その差が判定になる。**
 
 ### Step 3 — v1 の構成を読み出す
 
