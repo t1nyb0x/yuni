@@ -1,0 +1,85 @@
+# ---------------------------------------------------------------------------
+# Unity
+# ---------------------------------------------------------------------------
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Asset meta data should only be ignored when the corresponding asset is also ignored
+!/[Aa]ssets/**/*.meta
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Unity3D generated
+sysinfo.txt
+*.stackdump
+crashlytics-build.properties
+/[Aa]ssets/[Ss]treamingAssets/aa.meta
+/[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# Addressables / AssetBundle 出力
+/[Ss]erver[Dd]ata/
+/[Aa]sset[Bb]undles/
+
+# ---------------------------------------------------------------------------
+# サードパーティ有償アセット（要件定義書 NF-L-1）
+#
+# Unity Asset Store EULA はアセットの再配布を禁じている。リポジトリへ
+# コミットするとその禁止に触れる。所持者が各自でインポートすること。
+#
+# なお NF-L-2 により、これらが存在しない状態でもビルドが通らなければ
+# ならない。CI はこの状態を常時検証する。
+# ---------------------------------------------------------------------------
+/[Aa]ssets/MagicaCloth2/
+/[Aa]ssets/MagicaCloth2.meta
+/[Aa]ssets/Plugins/MagicaCloth2/
+/[Aa]ssets/Plugins/MagicaCloth2.meta
+
+# ---------------------------------------------------------------------------
+# モデルファイル（要件定義書 NF-L-5）
+#
+# いかなるモデルファイルも同梱・再配布しない。検証用に置いたものが
+# 事故でコミットされることを防ぐ。
+# ---------------------------------------------------------------------------
+*.vrm
+*.pmx
+*.unitypackage
+*.assetbundle
+/[Aa]ssets/[Mm]odels/
+/[Ss]amples/[Mm]odels/
+
+# ---------------------------------------------------------------------------
+# 機密
+# ---------------------------------------------------------------------------
+*.env
+.env.local
+secrets.json
+
+# ---------------------------------------------------------------------------
+# OS
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini

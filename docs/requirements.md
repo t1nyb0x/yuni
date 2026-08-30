@@ -609,7 +609,7 @@ moca の 1.0 条件を基礎とし、Yuni の優位（1.2 節）を加える。
 | U-3 | UI Toolkit での Markdown 表示 | **未決。** 0.1 で実機評価し、どこまで劣化を許容するか決める |
 | U-4 | エモートのモーションデータの調達元 | **未決。** 再配布可能なライセンスのものに限る（NF-L-4）。自作するか、CC0 等から調達するか |
 | U-5 | 人体コライダの寸法の決め方 | **未決。** PoC-1 で実測して定める |
-| U-6 | Unity のバージョン | **未決。** Unity 6 の LTS。UniVRM / UniWindowController / MagicaCloth2 の全部が対応する版へ固定する |
+| U-6 | Unity のバージョン | **解決。Unity 6000.0 LTS に固定する**（[ADR-0002](adr/0002-unity-6000-0-lts.md)）。UniVRM / MagicaCloth2 / UniWindowController の 3 つとも対応を確認済み。**パッチバージョンの差が AssetBundle 互換性に影響するかは PoC-2 で確かめる** |
 | U-7 | 配布サイズと起動時間の実測値 | **未決。** 0.1 で測り、4.2 節の目標値を確定させる |
 | U-8 | unitypackage 配布モデルの持ち込み方 | **解決（D-4）。** Yuni Packager で**素の Unity AssetBundle** へ焼く。互換性はファイルヘッダ（`UnityFS` シグネチャ + エンジンバージョン）で判定できるため、自作コンテナは持たない。1.3.1 節、F-18 |
 | U-9 | moca からの設定・会話履歴の移行 | **未決。** 形式は同一（JSON）だが、保存先が変わる。取り込み機能を持つかどうかを 0.2 までに決める |
@@ -623,6 +623,9 @@ moca の 1.0 条件を基礎とし、Yuni の優位（1.2 節）を加える。
 
 - `feasibility.md` — 実現可能性調査（判断の根拠と PoC 計画）
 - `adr/` — アーキテクチャ決定記録（**PoC の結果は必ずここへ記録すること**）
+  - [ADR-0001](adr/0001-unity-for-cloth-and-emote.md) — クロスとエモートのために Unity で作り直す
+  - [ADR-0002](adr/0002-unity-6000-0-lts.md) — Unity 6000.0 LTS に固定する（U-6）
+- [`poc/poc-1.md`](poc/poc-1.md) — **PoC-1 の実施手順。着手前にこれを通すこと（D-1）**
 - [moca 要件定義書](https://github.com/t1nyb0x/moca/blob/main/docs/requirements.md) — 継承元。**本書が「継承」と記す項目の正はこちら**
 - [moca アーキテクチャ概要](https://github.com/t1nyb0x/moca/blob/main/docs/architecture.md)
 - [moca 感情表現プロトコル](https://github.com/t1nyb0x/moca/blob/main/docs/emotion-protocol.md) — **無改変で継承する**
