@@ -99,6 +99,38 @@ Sphere  (Head) ×2:  radius 0.07 / 0.057
 
 **読み出したものは「クロス中間表現」へ落とすこと**（要件 F-17-13）。ソルバ固有の型をここへ持ち込まない。バックエンドを差し替えるときに効いてくる。
 
+#### 探す場所は 2 箇所ある（2026-08-31 実測）
+
+**`Magica_root` だけを見ても足りない。** 揺れ物の定義とコライダは別の場所にある。
+
+```
+Chifuyu Variant          ← FBX のプレハブインスタンス（stripped Transform 111 個）
+├─ Body / Cloth / Face / Hair / NeckMesh
+├─ Hips
+│   └─ …ボーン階層…
+│       ├─ Chest    → Magica Capsule Collider (Chest)     ★ここ
+│       ├─ Head     → Magica Sphere Collider (Head) ×2     ★ここ
+│       ├─ LegD_L   → Magica Capsule Collider (LegD_L)     ★ここ
+│       └─ LegD_R   → Magica Capsule Collider (LegD_R)     ★ここ
+└─ Magica_root
+    ├─ Magica Bone Cloth_Skirt   ← 揺れ物の定義だけ
+    └─ Magica Bone Cloth_Hair
+```
+
+| 探すもの | 場所 |
+|---|---|
+| 揺れ物のチェーン定義 | `Magica_root` 直下 |
+| **コライダの形状・配置** | **ボーン階層の中に散在** |
+| 両者の対応づけ | チェーン側の `teamData.colliderList`（**fileID 参照**） |
+
+**コライダがボーン階層にあるのは正しい設計である。** 体に追従しなければ、脚を動かした瞬間に置いていかれる。**変換後も同じボーンの子として配置すること。**
+
+`colliderList` は fileID による参照なので、**fileID からオブジェクトを解決する処理が要る。** 名前で引き当てないこと（同名オブジェクトが存在しうる。実際 `Magica Sphere Collider (Head)` は 2 個ある）。
+
+#### Inspector からは読めない
+
+Missing Script のコンポーネントは、Unity の Inspector では `None (Mono Script)` としか出ず、**シリアライズされた値は一切見えない。** 値は YAML には残っている。**だからファイルを直接読む。**
+
 ### Step 4 — SPCR へ変換して Unity Editor 上で構成する
 
 **ここが PoC-1 との決定的な違いである。実行時構築は要らない。**
@@ -118,6 +150,11 @@ Sphere  (Head) ×2:  radius 0.07 / 0.057
 ### Step 5 — AssetBundle として焼く
 
 `BuildPipeline.BuildAssetBundles` で prefab を焼く。**独自コンテナで包まないこと**（D-4）。
+
+**注意点 2 つ:**
+
+- **プレハブだけを焼くと壊れる**（F-18-13）。プレハブは FBX のインスタンスであり、ボーンの実体は FBX 側にある。依存を辿って FBX を含めること
+- **lilToon の移行が完了してから焼くこと**（F-18-14）。取り込み時に 8 枚のマテリアルへ移行処理が走った。移行前に焼くと古い形式のまま固まる
 
 ### Step 6 — Yuni 側で読んで座らせる
 
